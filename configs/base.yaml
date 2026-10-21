@@ -1,0 +1,32 @@
+# smoke-test defaults
+# everything marked OPEN gets locked on Oct 24 after we do go/no-go and then we freeze it in docs/PREREG.md
+seed: 0
+dataset:
+  name: Anthropic/hh-rlhf        # OPEN: helpful-only subset
+  rm_train_pairs: 2000           # small batch for now, scale up after go/no-go
+  n_tune_prompts: 200
+  n_test_prompts: null           # OPEN: figure out from power analysis (F8); leave test split untouched until freeze
+  label_noise: 0.25              # leave ON by default (F2), Coste-style; gotta run 0.0 too for comparison
+models:
+  policy: null                   # OPEN: need a sub-1B
+  rm_backbone: null              # OPEN
+  gold_rm: Skywork/Skywork-Reward-V2-Llama-3.1-8B  # CHECK: check size, fit, and contamination; need a backup RM ready
+ensemble:
+  K: 5                           # OPEN; about 4 dof for variance, need F1 calibration
+  lora_r: 16
+  bootstrap: true
+sampling:
+  N: 1024                        # OPEN: minimum N for G1 to pass
+  temperature: 1.0
+grids:
+  c: [0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0]   # log grid, [0.1, 10]
+  beta_policy: [0.05, 0.1, 0.2, 0.5, 1.0, 2.0]  # OPEN
+  ess_min: 10                    # OPEN: cut things off below this
+stats:
+  epsilon: null                  # OPEN: gold-reward units, derived from Mean-vs-WCO gap
+  primary_metric: null           # OPEN: e.g. mean gold gap over KL range
+  bootstrap_reps: 2000
+logging:
+  wandb_project: pessimistic-rlhf-beta-audit
+  cache_dir: cache/
+  ckpt_dir: checkpoints/
