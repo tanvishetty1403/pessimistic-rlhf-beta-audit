@@ -36,3 +36,21 @@ def bon_kl_analytic(n: int) -> float:
 def expected_gold(w: np.ndarray, gold: np.ndarray) -> np.ndarray:
     """Expected gold reward under the weighted policy, per prompt. w, gold: (..., N)."""
     return (w * gold).sum(axis=-1)
+
+
+def bon_weights(r: np.ndarray, n: int) -> np.ndarray:
+    """Exact best-of-n selection probabilities over N cached samples (no ties assumed).
+
+    Sample with ascending rank i (1-indexed) is the max of a random n-subset w.p. C(i-1, n-1) / C(N, n).
+    Returns weights aligned with r. Feeding these to kl_from_weights checks the estimator against log n - (n-1)/n.
+    """
+    from scipy.special import gammaln
+    N = r.shape[-1]
+    order = np.argsort(r, axis=-1)
+    i = np.arange(1, N + 1)
+    with np.errstate(invalid="ignore"):
+        logc = (gammaln(i) - gammaln(n) - gammaln(i - n + 1)) - (gammaln(N + 1) - gammaln(n + 1) - gammaln(N - n + 1))
+    p_sorted = np.where(i >= n, np.exp(np.nan_to_num(logc, nan=-np.inf)), 0.0)
+    w = np.zeros_like(p_sorted)
+    w[order] = p_sorted
+    return w

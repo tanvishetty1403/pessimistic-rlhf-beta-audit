@@ -52,3 +52,11 @@ def test_kl_cap_and_ess():
 def test_bon_kl_analytic():
     assert np.isclose(K.bon_kl_analytic(1), 0.0)
     assert np.isclose(K.bon_kl_analytic(64), np.log(64) - 63 / 64)
+
+
+def test_bon_weights_match_analytic_kl():
+    r = rng.normal(size=4096)
+    for n in (2, 8, 64):
+        w = K.bon_weights(r, n)
+        assert abs(w.sum() - 1) < 1e-9
+        assert abs(K.kl_from_weights(w) - K.bon_kl_analytic(n)) < 0.05
