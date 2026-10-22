@@ -6,7 +6,10 @@ dataset:
   rm_train_pairs: 2000           # small batch for now, scale up after go/no-go
   n_tune_prompts: 200
   n_test_prompts: null           # OPEN: figure out from power analysis (F8); leave test split untouched until freeze
-  label_noise: 0.25              # leave ON by default (F2), Coste-style; gotta run 0.0 too for comparison
+  label_noise: 0.25  
+  data_dir: helpful-base
+  smoke_n: 2000
+  gold_pairs: null      # path to C's gold file once it exists           # leave ON by default (F2), Coste-style; gotta run 0.0 too for comparison
 models:
   policy: null                   # OPEN: need a sub-1B
   rm_backbone: null              # OPEN

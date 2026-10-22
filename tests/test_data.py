@@ -33,3 +33,42 @@ def test_test_split_guard(tmp_path):
     with pytest.raises(PermissionError):
         D.load_split(p, "test")
     assert D.load_split(p, "test", allow_test=True) == [1]
+
+def test_pair_and_prompt_ids_present():
+    pairs = [{"pair_id": f"train-{i}", **mk(i)} for i in range(50)]
+    allp = [p for v in D.split_pairs(pairs, 0).values() for p in v]
+    assert all(p["pair_id"] and len(p["prompt_id"]) == 12 for p in allp)
+    assert len({p["pair_id"] for p in allp}) == 50
+
+
+def test_filter_mismatched():
+    good = mk(1)
+    bad = {"chosen": "\n\nHuman: a\n\nAssistant: x", "rejected": "\n\nHuman: b\n\nAssistant: y"}
+    kept, n = D.filter_mismatched([good, bad])
+    assert kept == [good] and n == 1
+
+
+def test_order_by_hash_nested_and_deterministic():
+    items = [f"p{i}" for i in range(500)]
+    a = D.order_by_hash(items, 0, key=lambda s: s)
+    assert a == D.order_by_hash(items, 0, key=lambda s: s)
+    assert a != D.order_by_hash(items, 1, key=lambda s: s) and a != sorted(items)
+
+
+def test_clean3_cases():
+    assert D.clean3("Because.\n\nFood: Human: They want a quick solution.") == "Because."
+    assert D.clean3("Fine for novels.\n\nThe Assistant: But how about") == "Fine for novels."
+    assert D.clean3("Sure, here you go.\n\nYes\n\nHuman: next") == "Sure, here you go.\n\nYes"
+    assert D.clean3("Human: How can I carry my own shopping b") == ""
+    assert D.clean3("No markers here.") == "No markers here."
+
+
+def test_relabel_with_gold_then_noise():
+    pairs = [{"pair_id": f"train-{i}", **mk(i)} for i in range(40)]
+    gold = {p["pair_id"]: {"gold_chosen": 1.0 if i % 2 == 0 else 0.0,
+                           "gold_rejected": 0.0 if i % 2 == 0 else 1.0, "gold_model": "m"}
+            for i, p in enumerate(pairs[:20])}
+    out = D.relabel_with_gold(pairs, gold)
+    assert len(out) == 20 and sum(q["relabeled"] for q in out) == 10
+    noisy, _ = D.inject_label_noise(out, 0.25, 0)
+    assert noisy[0]["flip_seed"] == 0 and noisy[0]["noise_rate"] == 0.25
