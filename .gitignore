@@ -2,8 +2,13 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 wandb/
-data/
+data/*
+!data/splits/
+data/splits/*
+!data/splits/smoke_ids.txt
+!data/splits/manifest.json
 cache/
 *.pt
 *.safetensors
 .env
+.venv/
