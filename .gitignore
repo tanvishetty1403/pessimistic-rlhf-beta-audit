@@ -8,3 +8,4 @@ cache/
 *.safetensors
 .env
 .venv/
+figs_smoke/
