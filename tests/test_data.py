@@ -113,3 +113,14 @@ def test_manifest_deterministic_and_seed_sensitive():
     m3 = D.split_manifest(D.split_pairs(pairs, 1), 1, D.DEFAULT_FRAC, "rev", "helpful-base")
     assert m1 == m2 and m1["sha256_prompt_ids"] != m3["sha256_prompt_ids"]
     assert set(m1["sha256_prompt_ids"]) == {"rm_train", "tune", "test"}
+
+def test_flipped_flag_matches_mask_for_every_pair():
+    pairs = [mk(i) for i in range(500)]
+    new, flip = D.inject_label_noise(pairs, 0.25, 0)
+    for i, (p, q) in enumerate(zip(pairs, new)):
+        assert q["flipped"] == bool(flip[i])
+        if flip[i]:
+            assert (q["chosen"], q["rejected"]) == (p["rejected"], p["chosen"])
+        else:
+            assert (q["chosen"], q["rejected"]) == (p["chosen"], p["rejected"])
+        assert q["flip_seed"] == 0 and q["noise_rate"] == 0.25

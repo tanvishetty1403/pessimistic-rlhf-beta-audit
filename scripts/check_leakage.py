@@ -1,10 +1,7 @@
 import sys, pathlib; sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import collections, yaml
 from datasets import load_dataset
-from src.data import extract_prompt, assign_split, filter_mismatched
-
-def first_turn(pr):
-    return pr.split("\n\nAssistant:")[0].replace("\n\nHuman:", "", 1).strip()
+from src.data import extract_prompt, first_turn, assign_split, filter_mismatched
 
 cfg = yaml.safe_load(open(sys.argv[1])); d = cfg["dataset"]
 ds = load_dataset(d["name"], data_dir=d.get("data_dir"), revision=d.get("revision"), split="train")
@@ -24,4 +21,5 @@ cnt = collections.Counter(groups)
 print("most common first turns:")
 for g, c in cnt.most_common(5):
     print(c, repr(g[:80]))
-    
+sizes = sorted(cnt.values(), reverse=True)
+print(f"groups: {len(cnt)}, pairs per group: mean {len(groups)/len(cnt):.1f}, max {sizes[0]}, top-10 groups cover {sum(sizes[:10])} pairs")
