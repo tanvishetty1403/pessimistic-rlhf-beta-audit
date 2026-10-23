@@ -1,0 +1,23 @@
+{
+  "dataset": "Anthropic/hh-rlhf",
+  "data_dir": "helpful-base",
+  "revision": "09be8c5bbc57cb3887f3a9732ad6aa7ec602a1fa",
+  "seed": 0,
+  "frac": [
+    0.8,
+    0.1,
+    0.1
+  ],
+  "n_pairs": {
+    "rm_train": 35096,
+    "tune": 4285,
+    "test": 4326
+  },
+  "sha256_prompt_ids": {
+    "rm_train": "db021fa7fbec1be0822d81227de2f648300875ffcf5429d9383b92f324baec85",
+    "tune": "e3ff4df6834e9ae88317bcef08a49b34927f1d1d5523450278bcb123ea1350a7",
+    "test": "4e513b811ee7ed77b35be041e1a2c8bbb240f1978cd5c99f52291ba9ca9d0691"
+  },
+  "sha256_smoke_ids": "aa33854b69cf3c3aa489ff3d9bb4df38881d0b11bb1f35598c17066c324c7fa5",
+  "sha256_tune_prompts_selected": "f0536e7b506ae8fe7dd88f7f9a3542c874ac525eac5ec8108af7519bc5237c44"
+}

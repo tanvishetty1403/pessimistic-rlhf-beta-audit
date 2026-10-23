@@ -72,3 +72,44 @@ def test_relabel_with_gold_then_noise():
     assert len(out) == 20 and sum(q["relabeled"] for q in out) == 10
     noisy, _ = D.inject_label_noise(out, 0.25, 0)
     assert noisy[0]["flip_seed"] == 0 and noisy[0]["noise_rate"] == 0.25
+
+def test_shared_first_turn_stays_in_one_split():
+    pairs = []
+    for i in range(300):
+        first = f"\n\nHuman: opening {i % 60}\n\nAssistant: ok{i}"
+        pr = first + f"\n\nHuman: follow-up {i}\n\nAssistant:"
+        pairs.append({"pair_id": f"train-{i}", "chosen": pr + " good", "rejected": pr + " bad"})
+    sp = D.split_pairs(pairs, 0)
+    seen = {}
+    for k, v in sp.items():
+        for p in v:
+            seen.setdefault(p["group"], set()).add(k)
+    assert len(seen) == 60 and all(len(v) == 1 for v in seen.values())
+
+
+def test_gold_ties_are_dropped_not_swapped():
+    pairs = [{"pair_id": f"train-{i}", **mk(i)} for i in range(3)]
+    gold = {"train-0": {"gold_chosen": 1.0, "gold_rejected": 1.0, "gold_model": "m"},
+            "train-1": {"gold_chosen": 2.0, "gold_rejected": 1.0, "gold_model": "m"},
+            "train-2": {"gold_chosen": 0.0, "gold_rejected": 1.0, "gold_model": "m"}}
+    out = D.relabel_with_gold(pairs, gold)
+    assert [q["pair_id"] for q in out] == ["train-1", "train-2"]
+    assert out[1]["relabeled"] and out[1]["chosen"].endswith("bad2")
+
+
+def test_test_guard_cannot_be_bypassed_by_split_name(tmp_path):
+    p = tmp_path / "test.json"; D.save_split([1], p)
+    with pytest.raises(PermissionError):
+        D.load_split(p, "tune")
+    assert D.load_split(p, "tune", allow_test=True) == [1]
+    q = tmp_path / "tune_prompts.json"; D.save_split([2], q)
+    assert D.load_split(q, "tune") == [2]
+
+
+def test_manifest_deterministic_and_seed_sensitive():
+    pairs = [{"pair_id": f"train-{i}", **mk(i)} for i in range(400)]
+    m1 = D.split_manifest(D.split_pairs(pairs, 0), 0, D.DEFAULT_FRAC, "rev", "helpful-base")
+    m2 = D.split_manifest(D.split_pairs(pairs, 0), 0, D.DEFAULT_FRAC, "rev", "helpful-base")
+    m3 = D.split_manifest(D.split_pairs(pairs, 1), 1, D.DEFAULT_FRAC, "rev", "helpful-base")
+    assert m1 == m2 and m1["sha256_prompt_ids"] != m3["sha256_prompt_ids"]
+    assert set(m1["sha256_prompt_ids"]) == {"rm_train", "tune", "test"}
