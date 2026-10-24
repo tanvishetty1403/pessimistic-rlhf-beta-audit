@@ -137,3 +137,28 @@ def split_manifest(sp, seed, frac, revision, data_dir, smoke_ids=(), tune_prompt
 def first_turn(prompt: str) -> str:
     """Opening human turn of a conversation: the leakage-safe grouping key."""
     return prompt.split("\n\nAssistant:")[0].replace("\n\nHuman:", "", 1).strip()
+
+
+def relabel_and_save(pairs, gold, path):
+    """Relabel with gold and write the result, but only if something is left.
+    Raises ValueError BEFORE touching `path` when no scored, non-tied pairs remain."""
+    out = relabel_with_gold(pairs, gold)
+    if not out:
+        raise ValueError("gold relabeling left no scored, non-tied pairs; nothing was written")
+    save_split(out, path)
+    return out
+
+
+def local_checks(split_dir, manifest):
+    """Hash the LOCAL split files and compare with the committed manifest.
+    Reads only ids (never prints text). Returns {check_name: bool}."""
+    def pids(fn):
+        return {p["prompt_id"] for p in json.load(open(os.path.join(split_dir, fn)))}
+    tune = json.load(open(os.path.join(split_dir, "tune_prompts.json")))
+    smoke = open(os.path.join(split_dir, "smoke_ids.txt")).read().split()
+    return {
+        "test_prompt_ids": _sha(pids("test.json")) == manifest["sha256_prompt_ids"]["test"],
+        "tune_selected": _sha([prompt_id(t) for t in tune]) == manifest["sha256_tune_prompts_selected"],
+        "smoke_ids": _sha(smoke) == manifest["sha256_smoke_ids"],
+        "rm_train_disjoint_from_test": not (pids("rm_train_clean.json") & pids("test.json")),
+    }
