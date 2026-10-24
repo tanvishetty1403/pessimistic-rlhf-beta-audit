@@ -1,0 +1,8 @@
+src\data.py:20:def assign_split(prompt: str, seed: int, frac=(0.8, 0.1, 0.1)) -> str:
+src\data.py:28:def split_pairs(pairs, seed=0, frac=(0.8, 0.1, 0.1)):
+src\data.py:37:def inject_label_noise(pairs, noise: float, seed=0):
+src\data.py:51:def save_split(pairs, path):
+src\data.py:56:def load_split(path, split, allow_test=False):
+src\kl_ess.py:36:def expected_gold(w: np.ndarray, gold: np.ndarray) -> np.ndarray:
+src\kl_ess.py:37:    """Expected gold reward under the weighted policy, per prompt. w, gold: (..., N)."""
+src\kl_ess.py:38:    return (w * gold).sum(axis=-1)
