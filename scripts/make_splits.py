@@ -28,8 +28,11 @@ if d.get("gold_pairs"):                            # C's JSONL: pair_id, gold_ch
     n_in = len(rm_train)
     rm_train = relabel_with_gold(rm_train, gold)
     save_split(rm_train, "data/splits/rm_train_gold_relabeled.json")
-    agree = sum(p["gold_agrees_with_human"] for p in rm_train) / len(rm_train)
-    print(f"gold agrees with the human label on {agree:.1%} of {len(rm_train)} scored, non-tied pairs (of {n_in})")
+    if rm_train:
+        agree = sum(p["gold_agrees_with_human"] for p in rm_train) / len(rm_train)
+        print(f"gold agrees with the human label on {agree:.1%} of {len(rm_train)} scored, non-tied pairs (of {n_in})")
+    else:
+        sys.exit("gold relabeling left no scored, non-tied pairs; stopping so existing outputs are not overwritten")
 
 noisy, _ = inject_label_noise(rm_train, d["label_noise"], cfg["seed"])
 save_split(noisy, "data/splits/rm_train_noisy.json")
