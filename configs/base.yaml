@@ -14,7 +14,7 @@ dataset:
 models:
   policy: null                   # OPEN: need a sub-1B
   rm_backbone: null              # OPEN
-  gold_rm: Skywork/Skywork-Reward-V2-Llama-3.1-8B  # CHECK: check size, fit, and contamination; need a backup RM ready
+  gold_rm: Skywork/Skywork-Reward-V2-Llama-3.2-3B
 ensemble:
   K: 5                           # OPEN; about 4 dof for variance, need F1 calibration
   lora_r: 16
