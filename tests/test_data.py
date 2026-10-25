@@ -124,3 +124,62 @@ def test_flipped_flag_matches_mask_for_every_pair():
         else:
             assert (q["chosen"], q["rejected"]) == (p["chosen"], p["rejected"])
         assert q["flip_seed"] == 0 and q["noise_rate"] == 0.25
+
+
+def test_relabel_and_save_guard_leaves_file_untouched(tmp_path):
+    f = tmp_path / "rm_train_gold_relabeled.json"
+    f.write_text("OLD")
+    pairs = [{"pair_id": f"train-{i}", **mk(i)} for i in range(5)]
+    with pytest.raises(ValueError):
+        D.relabel_and_save(pairs, {}, f)                        # no gold rows at all
+    assert f.read_text() == "OLD"
+    ties = {p["pair_id"]: {"gold_chosen": 1.0, "gold_rejected": 1.0, "gold_model": "m"} for p in pairs}
+    with pytest.raises(ValueError):
+        D.relabel_and_save(pairs, ties, f)                      # everything tied
+    assert f.read_text() == "OLD"
+    gold = {"train-0": {"gold_chosen": 2.0, "gold_rejected": 1.0, "gold_model": "m"}}
+    out = D.relabel_and_save(pairs, gold, f)                    # normal case writes
+    assert len(out) == 1 and D.load_split(f, "rm_train")[0]["pair_id"] == "train-0"
+
+
+def _write_local(tmp_path):
+    pairs = [{"pair_id": f"train-{i}", **mk(i)} for i in range(600)]
+    sp = D.split_pairs(pairs, 0)
+    tune = D.order_by_hash(sorted({p["prompt"] for p in sp["tune"]}), 0, key=lambda s: s)[:20]
+    rm = D.order_by_hash(sp["rm_train"], 0, key=lambda p: p["pair_id"])[:50]
+    smoke = [p["pair_id"] for p in rm[:10]]
+    D.save_split(rm, tmp_path / "rm_train_clean.json")
+    D.save_split(tune, tmp_path / "tune_prompts.json")
+    D.save_split(sp["test"], tmp_path / "test.json")
+    (tmp_path / "smoke_ids.txt").write_text("\n".join(smoke))
+    return D.split_manifest(sp, 0, D.DEFAULT_FRAC, "rev", "helpful-base", smoke_ids=smoke, tune_prompts=tune), sp
+
+
+def test_local_checks_pass_and_catch_tampering(tmp_path):
+    man, sp = _write_local(tmp_path)
+    assert all(D.local_checks(str(tmp_path), man).values())
+    D.save_split(sp["test"][:-1], tmp_path / "test.json")      # drop one test pair
+    assert D.local_checks(str(tmp_path), man)["test_prompt_ids"] is False
+
+
+def test_group_overlap_is_caught_even_when_prompt_ids_differ(tmp_path):
+    man, sp = _write_local(tmp_path)
+    res = D.local_checks(str(tmp_path), man)
+    assert res["rm_train_groups_disjoint_from_test"] and res["tune_groups_disjoint_from_test"]
+
+    # a test pair's first turn leaks into rm_train, but with a different full context (new prompt_id):
+    # exactly what reverting to full-prompt hashing would produce
+    leaked = {**sp["test"][0], "pair_id": "train-leak", "prompt_id": "zzzzzzzzzzzz"}
+    rm = D.load_split(tmp_path / "rm_train_clean.json", "rm_train")
+    D.save_split(rm + [leaked], tmp_path / "rm_train_clean.json")
+    res = D.local_checks(str(tmp_path), man)
+    assert res["rm_train_groups_disjoint_from_test"] is False
+    assert res["rm_train_prompt_ids_disjoint_from_test"] is True      # the old check alone would have missed it
+
+
+def test_tune_group_overlap_is_caught(tmp_path):
+    man, sp = _write_local(tmp_path)
+    g = sp["test"][0]["group"]
+    tune = D.load_split(tmp_path / "tune_prompts.json", "tune")
+    D.save_split(tune + [f"\n\nHuman: {g}\n\nAssistant: x\n\nHuman: more\n\nAssistant:"], tmp_path / "tune_prompts.json")
+    assert D.local_checks(str(tmp_path), man)["tune_groups_disjoint_from_test"] is False

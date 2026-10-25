@@ -4,7 +4,7 @@ import sys, pathlib; sys.path.insert(0, str(pathlib.Path(__file__).resolve().par
 import json, os, yaml
 from datasets import load_dataset
 from src.data import (DEFAULT_FRAC, split_pairs, inject_label_noise, save_split, filter_mismatched,
-                      order_by_hash, relabel_with_gold, split_manifest)
+                      order_by_hash, relabel_and_save, split_manifest)
 
 cfg = yaml.safe_load(open(sys.argv[1]))
 d = cfg["dataset"]
@@ -26,8 +26,10 @@ if d.get("gold_pairs"):                            # C's JSONL: pair_id, gold_ch
     for line in open(d["gold_pairs"]):
         r = json.loads(line); gold[r["pair_id"]] = r
     n_in = len(rm_train)
-    rm_train = relabel_with_gold(rm_train, gold)
-    save_split(rm_train, "data/splits/rm_train_gold_relabeled.json")
+    try:
+        rm_train = relabel_and_save(rm_train, gold, "data/splits/rm_train_gold_relabeled.json")
+    except ValueError as e:
+        sys.exit(str(e))                           # nothing written; rm_train_clean/noisy untouched
     agree = sum(p["gold_agrees_with_human"] for p in rm_train) / len(rm_train)
     print(f"gold agrees with the human label on {agree:.1%} of {len(rm_train)} scored, non-tied pairs (of {n_in})")
 
