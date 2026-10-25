@@ -32,7 +32,7 @@ def load_gold(model_name=GOLD_MODEL, device="cuda:0", dtype=torch.float16):
     tok = AutoTokenizer.from_pretrained(model_name)
     tok.truncation_side = "left"  # if anything is cut, keep the response end
     rm = AutoModelForSequenceClassification.from_pretrained(
-        model_name, torch_dtype=dtype, device_map=device,
+        model_name, torch_dtype=dtype, device_map={"": device},
         attn_implementation="sdpa", num_labels=1,
     ).eval()
     # pad token must not be a token that appears in the text
@@ -50,8 +50,8 @@ def hh_to_msgs(text):
         {"role": "user" if r == "Human" else "assistant", "content": c.strip()}
         for r, c in zip(parts[1::2], parts[2::2])
     ]
-    assert msgs and msgs[-1]["role"] == "assistant" and msgs[-1]["content"], (
-        "text must be HH format and end with a non-empty Assistant turn: "
+    assert msgs and msgs[-1]["role"] == "assistant", (
+        "text must be HH format and end with an Assistant turn (empty is allowed): "
         + repr(text[-80:]))
     return msgs
 
