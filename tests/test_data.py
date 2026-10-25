@@ -160,3 +160,26 @@ def test_local_checks_pass_and_catch_tampering(tmp_path):
     assert all(D.local_checks(str(tmp_path), man).values())
     D.save_split(sp["test"][:-1], tmp_path / "test.json")      # drop one test pair
     assert D.local_checks(str(tmp_path), man)["test_prompt_ids"] is False
+
+
+def test_group_overlap_is_caught_even_when_prompt_ids_differ(tmp_path):
+    man, sp = _write_local(tmp_path)
+    res = D.local_checks(str(tmp_path), man)
+    assert res["rm_train_groups_disjoint_from_test"] and res["tune_groups_disjoint_from_test"]
+
+    # a test pair's first turn leaks into rm_train, but with a different full context (new prompt_id):
+    # exactly what reverting to full-prompt hashing would produce
+    leaked = {**sp["test"][0], "pair_id": "train-leak", "prompt_id": "zzzzzzzzzzzz"}
+    rm = D.load_split(tmp_path / "rm_train_clean.json", "rm_train")
+    D.save_split(rm + [leaked], tmp_path / "rm_train_clean.json")
+    res = D.local_checks(str(tmp_path), man)
+    assert res["rm_train_groups_disjoint_from_test"] is False
+    assert res["rm_train_prompt_ids_disjoint_from_test"] is True      # the old check alone would have missed it
+
+
+def test_tune_group_overlap_is_caught(tmp_path):
+    man, sp = _write_local(tmp_path)
+    g = sp["test"][0]["group"]
+    tune = D.load_split(tmp_path / "tune_prompts.json", "tune")
+    D.save_split(tune + [f"\n\nHuman: {g}\n\nAssistant: x\n\nHuman: more\n\nAssistant:"], tmp_path / "tune_prompts.json")
+    assert D.local_checks(str(tmp_path), man)["tune_groups_disjoint_from_test"] is False

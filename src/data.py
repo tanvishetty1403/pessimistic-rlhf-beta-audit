@@ -138,7 +138,6 @@ def first_turn(prompt: str) -> str:
     """Opening human turn of a conversation: the leakage-safe grouping key."""
     return prompt.split("\n\nAssistant:")[0].replace("\n\nHuman:", "", 1).strip()
 
-
 def relabel_and_save(pairs, gold, path):
     """Relabel with gold and write the result, but only if something is left.
     Raises ValueError BEFORE touching `path` when no scored, non-tied pairs remain."""
@@ -150,15 +149,26 @@ def relabel_and_save(pairs, gold, path):
 
 
 def local_checks(split_dir, manifest):
-    """Hash the LOCAL split files and compare with the committed manifest.
-    Reads only ids (never prints text). Returns {check_name: bool}."""
+    """Hash the LOCAL split files and compare with the committed manifest, and check that no first-turn
+    group (and no prompt_id) is shared between test and the other files. Reads only ids/groups, never prints text.
+    Returns {check_name: bool}."""
+    def load(fn):
+        return json.load(open(os.path.join(split_dir, fn)))
+
     def pids(fn):
-        return {p["prompt_id"] for p in json.load(open(os.path.join(split_dir, fn)))}
-    tune = json.load(open(os.path.join(split_dir, "tune_prompts.json")))
+        return {p["prompt_id"] for p in load(fn)}
+
+    def groups(fn):
+        return {p["group"] for p in load(fn)}
+
+    tune = load("tune_prompts.json")
     smoke = open(os.path.join(split_dir, "smoke_ids.txt")).read().split()
+    test_groups = groups("test.json")
     return {
         "test_prompt_ids": _sha(pids("test.json")) == manifest["sha256_prompt_ids"]["test"],
         "tune_selected": _sha([prompt_id(t) for t in tune]) == manifest["sha256_tune_prompts_selected"],
         "smoke_ids": _sha(smoke) == manifest["sha256_smoke_ids"],
-        "rm_train_disjoint_from_test": not (pids("rm_train_clean.json") & pids("test.json")),
+        "rm_train_prompt_ids_disjoint_from_test": not (pids("rm_train_clean.json") & pids("test.json")),
+        "rm_train_groups_disjoint_from_test": not (groups("rm_train_clean.json") & test_groups),
+        "tune_groups_disjoint_from_test": not ({first_turn(t) for t in tune} & test_groups),
     }
