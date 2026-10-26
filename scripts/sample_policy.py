@@ -43,7 +43,12 @@ if (out / "config.json").exists() and json.load(open(out / "config.json")) != cf
     sys.exit(f"{out}/config.json differs from these arguments: use a new --out, or delete the old folder")
 json.dump(cfg, open(out / "config.json", "w"), indent=2)
 
-prompts = load_split(args.prompts, "tune")[: args.n_prompts]
+try:
+    S.check_prompts_path(args.prompts)
+except ValueError as e:
+    sys.exit(str(e))
+prompts = load_split(args.prompts, "tune")[: args.n_prompts]      # hash-ordered, so the first n are a random sample
+
 run_id = out.name
 api = None
 if args.hf_repo:

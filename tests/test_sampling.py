@@ -99,3 +99,15 @@ def test_run_sampling_shards_resume_skip_long_prompts_and_merge(lm, tmp_path):
     assert n_rec == 5 == len(rows) and all(len(r["responses"]) == 4 for r in rows)
     rt = S.rates(rows)
     assert rt["responses"] == 20 and 0.0 <= rt["hit_length"] <= 1.0
+
+
+def test_frozen_test_split_is_refused(tmp_path):
+    from src.data import load_split, save_split
+    S.check_prompts_path("data/splits/tune_prompts.json")
+    for bad in ("data/splits/test.json", "x/TEST.json"):
+        with pytest.raises(ValueError):
+            S.check_prompts_path(bad)
+    p = tmp_path / "test.json"
+    save_split(["a prompt"], p)
+    with pytest.raises(PermissionError):                      # the same call sample_policy.py makes
+        load_split(p, "tune")

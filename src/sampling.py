@@ -16,6 +16,11 @@ import torch
 
 from src.data import clean3, prompt_id
 
+def check_prompts_path(path):
+    """Refuse the frozen test split by file name (load_split has its own guard; this one fails earlier and louder)."""
+    if "test" in pathlib.Path(str(path)).name.lower():
+        raise ValueError(f"refusing to sample from {path}: the test split is frozen")
+
 
 def seed_for(seed, pid, chunk_idx):
     return int(hashlib.sha256(f"{seed}|{pid}|{chunk_idx}".encode()).hexdigest()[:8], 16)
