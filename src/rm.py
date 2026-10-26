@@ -263,10 +263,15 @@ def scores_tensor(records, member_scores, keys):
         raise ValueError("the .npz layout needs the same number of responses for every prompt")
     pos = {(rec["prompt_id"], r["response_id"]): (i, j)
            for i, rec in enumerate(records) for j, r in enumerate(rec["responses"])}
-    out = np.zeros((P, N, K), dtype=np.float32)
+    out = np.full((P, N, K), np.nan, dtype=np.float32)
     for m, key in enumerate(keys):
         i, j = pos[key]
         out[i, j, :] = member_scores[:, m]
+    
+    assert len(keys) == P * N, f"Expected {P*N} keys, got {len(keys)}"
+    assert not np.isnan(out).any(), "Found NaNs in output! Missing or duplicate keys."
+    
     prompt_ids = np.array([rec["prompt_id"] for rec in records])
     response_ids = np.array([[r["response_id"] for r in rec["responses"]] for rec in records])
-    return out, prompt_ids, response_ids
+    
+    return out, prompt_ids, response_ids  

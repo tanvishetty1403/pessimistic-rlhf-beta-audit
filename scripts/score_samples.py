@@ -87,6 +87,26 @@ print(f"scored {len(rows)} of {n_resp} responses with {ms.shape[0]} members, max
 
 if args.npz:
     import numpy as np
+    import subprocess
+    
+    # Sidecar metadata
+    git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+    meta = {
+        "ensemble_id": ensemble_id,
+        "base": base,
+        "max_length": max_length,
+        "share_over_512": float(n_over / max(len(lengths), 1)),
+        "n_over_512": n_over,
+        "P": len(records),
+        "N": len(records[0]["responses"]),
+        "K": ms.shape[0],
+        "git_hash": git_hash
+    }
+    meta_path = str(args.npz).replace(".npz", ".meta.json")
+    with open(meta_path, "w") as f:
+        json.dump(meta, f, indent=2)
+    print(f"wrote meta to {meta_path}")
+
     Rr, pids, rids = R.scores_tensor(records, ms, keys)
     np.savez(args.npz, R=Rr, prompt_ids=pids, response_ids=rids)
     print(f"wrote {args.npz}: R {Rr.shape} (P, N, K), prompt_ids {pids.shape}, response_ids {rids.shape}, "

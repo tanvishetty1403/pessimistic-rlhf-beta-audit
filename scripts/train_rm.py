@@ -13,6 +13,7 @@ import json
 import pathlib
 import subprocess
 import sys
+import hashlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -20,6 +21,7 @@ import torch
 
 from src import rm as R
 from src.data import load_split
+
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--model", default="EleutherAI/pythia-410m")
@@ -54,6 +56,10 @@ if not val:
 if len(val) < args.n_val:
     print(f"WARNING: only {len(val)} validation pairs available (wanted {args.n_val})")
 
+# Hash the pair_ids to ensure noise_on and noise_off align
+train_hash = hashlib.sha256(",".join([str(p["pair_id"]) for p in train]).encode()).hexdigest()[:12]
+val_hash = hashlib.sha256(",".join([str(p["pair_id"]) for p in val]).encode()).hexdigest()[:12]
+
 label_source = "gold" if "gold_model" in train[0] else "human"
 noise = float(train[0].get("noise_rate", 0.0))
 ensemble_id = args.ensemble_id or (
@@ -73,7 +79,12 @@ except Exception:
     git_hash = ""
 meta = {"base": args.model, "max_length": args.max_length, "label_source": label_source, "noise_rate": noise,
         "train_file": args.train_file, "val_file": args.val_file, "lora_r": args.lora_r,
-        "lora_alpha": args.lora_alpha, "git_hash": git_hash}
+        "lora_alpha": args.lora_alpha, "git_hash": git_hash,
+        "train_pair_ids_hash": train_hash, "val_pair_ids_hash": val_hash}
+
+# D's review item 7: check that validation matches training label source
+if ("gold_model" in val[0]) != ("gold_model" in train[0]):
+    sys.exit("ERROR: train and val have different label sources. Fix your files.")
 
 on_done = None
 if args.hf_repo:

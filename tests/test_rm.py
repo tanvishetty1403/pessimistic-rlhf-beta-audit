@@ -118,29 +118,45 @@ def test_ensemble_stats_use_unbiased_variance():
     assert np.allclose(R.ensemble_stats(ms[:1])[1], [0.0, 0.0])
 
 
-def test_collect_texts_skips_empty_and_rows_align():
+def test_collect_texts_includes_empty_and_rows_align():
     recs = [{"prompt_id": "p1", "prompt": "\n\nHuman: a\n\nAssistant:",
              "responses": [{"response_id": "p1-0", "clean": " Fine.", "empty": False},
                            {"response_id": "p1-1", "clean": "", "empty": True},
                            {"response_id": "p1-2", "clean": "Ok", "empty": False}]}]
     texts, keys = R.collect_texts(recs)
-    assert keys == [("p1", "p1-0"), ("p1", "p1-2")] and texts[0].endswith("Assistant: Fine.")
-    rows = R.score_rows(keys, np.array([[1.0, 2.0], [3.0, 4.0]]), "t")
-    assert rows[1]["member_scores"] == [2.0, 4.0] and rows[1]["response_id"] == "p1-2" and rows[0]["var"] == 2.0
+    
+    assert keys == [("p1", "p1-0"), ("p1", "p1-1"), ("p1", "p1-2")]
+    assert texts[0].endswith("Assistant: Fine.")
+    assert texts[1].endswith("Assistant: ")  # prompt + " "
+    assert texts[2].endswith("Assistant: Ok")
+    
+    rows = R.score_rows(keys, np.array([[1.0, 2.0, 3.0], [3.0, 4.0, 5.0]]), "t")
+    assert rows[1]["member_scores"] == [2.0, 4.0] and rows[1]["response_id"] == "p1-1"
+    assert rows[0]["var"] == 2.0
 
 
-def test_scores_tensor_layout_ids_and_nan_for_empty(tmp_path):
+def test_scores_tensor_layout_ids_and_dense(tmp_path):
     recs = [{"prompt_id": f"p{i}", "prompt": "\n\nHuman: q\n\nAssistant:",
              "responses": [{"response_id": f"p{i}-{j}", "clean": "" if (i, j) == (1, 2) else f"a{i}{j}",
                             "empty": (i, j) == (1, 2)} for j in range(3)]} for i in range(2)]
     texts, keys = R.collect_texts(recs)
-    assert len(keys) == 5
-    ms = np.arange(2 * 5, dtype=np.float32).reshape(2, 5) + 1          # K=2, M=5
+    
+    assert len(keys) == 6
+    
+    ms = np.arange(2 * 6, dtype=np.float32).reshape(2, 6) + 1          # K=2, M=6
     Rr, pids, rids = R.scores_tensor(recs, ms, keys)
+    
+    # R is dense (no NaNs)
     assert Rr.shape == (2, 3, 2) and pids.tolist() == ["p0", "p1"] and rids.shape == (2, 3)
     assert rids[1].tolist() == ["p1-0", "p1-1", "p1-2"]
-    assert np.isnan(Rr[1, 2]).all() and not np.isnan(Rr[:, :2]).any() and np.isnan(Rr).sum() == 2
-    assert Rr[0, 0].tolist() == [1.0, 6.0] and Rr[1, 0].tolist() == [4.0, 9.0] and Rr[1, 1].tolist() == [5.0, 10.0]
+    assert not np.isnan(Rr).any()  # D's review: dense!
+    
+    # Check values
+    assert Rr[0, 0].tolist() == [1.0, 7.0]
+    assert Rr[1, 0].tolist() == [4.0, 10.0]
+    assert Rr[1, 1].tolist() == [5.0, 11.0]
+    assert Rr[1, 2].tolist() == [6.0, 12.0]  # This was the empty one, now scored
+    
     np.savez(tmp_path / "s.npz", R=Rr, prompt_ids=pids, response_ids=rids)
     z = np.load(tmp_path / "s.npz")
     assert set(z.files) == {"R", "prompt_ids", "response_ids"} and z["R"].shape == (2, 3, 2)
