@@ -12,3 +12,4 @@ cache/
 *.safetensors
 .env
 .venv/
+samples/
