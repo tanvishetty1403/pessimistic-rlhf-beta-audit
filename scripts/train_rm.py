@@ -51,12 +51,17 @@ if len(train) < args.n_train:
     sys.exit(f"{args.train_file} has only {len(train_all)} pairs, need {args.n_train}")
 train_ids = {p["pair_id"] for p in train}
 val = [p for p in load_split(args.val_file, "rm_train") if p["pair_id"] not in train_ids][: args.n_val]
+
 if not val:
     sys.exit("no validation pairs left: raise rm_train_pairs in the config and rerun make_splits.py")
 if len(val) < args.n_val:
     print(f"WARNING: only {len(val)} validation pairs available (wanted {args.n_val})")
 
-# Hash the pair_ids to ensure noise_on and noise_off align
+if ("gold_model" in val[0]) != ("gold_model" in train[0]):
+    sys.exit("ERROR: train and val have different label sources. Fix your files.")
+if train[0].get("noise_rate", 0) > 0 and any(p.get("flipped", False) for p in val):
+    sys.exit("ERROR: validation file contains flipped (noisy) pairs. Use a clean val file.")
+
 train_hash = hashlib.sha256(",".join([str(p["pair_id"]) for p in train]).encode()).hexdigest()[:12]
 val_hash = hashlib.sha256(",".join([str(p["pair_id"]) for p in val]).encode()).hexdigest()[:12]
 
@@ -80,9 +85,9 @@ except Exception:
 meta = {"base": args.model, "max_length": args.max_length, "label_source": label_source, "noise_rate": noise,
         "train_file": args.train_file, "val_file": args.val_file, "lora_r": args.lora_r,
         "lora_alpha": args.lora_alpha, "git_hash": git_hash,
-        "train_pair_ids_hash": train_hash, "val_pair_ids_hash": val_hash}
+        "train_pair_ids_hash": train_hash, "val_pair_ids_hash": val_hash,  "gold_model": train[0].get("gold_model") if label_source == "gold" else None}
 
-# D's review item 7: check that validation matches training label source
+# check that validation matches training label source
 if ("gold_model" in val[0]) != ("gold_model" in train[0]):
     sys.exit("ERROR: train and val have different label sources. Fix your files.")
 

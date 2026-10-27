@@ -35,7 +35,7 @@ args = ap.parse_args()
 
 if args.untrained:
     base = args.base or "EleutherAI/pythia-410m"
-    max_length = args.max_length or 2048
+    max_length = args.max_length or 512
     ensemble_id = f"untrained_K{args.untrained}"
     member_dirs = None
 else:
@@ -85,29 +85,48 @@ with open(args.out, "w") as f:
 
 print(f"scored {len(rows)} of {n_resp} responses with {ms.shape[0]} members, max_length {max_length}; wrote {args.out}")
 
+
+lengths = [len(tok(t, truncation=False).input_ids) for t in texts]
+n_over = sum(length > 512 for length in lengths)
+share_over_512 = n_over / max(len(lengths), 1)
+print(f"share of texts over 512 tokens: {share_over_512:.1%} ({n_over}/{len(lengths)})")
+
+
 if args.npz:
     import numpy as np
+    import pathlib
+    import hashlib
     import subprocess
     
-    # Sidecar metadata
-    git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+    # 1. Write NPZ FIRST
+    Rr, pids, rids = R.scores_tensor(records, ms, keys)
+    np.savez(args.npz, R=Rr, prompt_ids=pids, response_ids=rids)
+    print(f"wrote {args.npz}: R {Rr.shape} (P, N, K), prompt_ids {pids.shape}, response_ids {rids.shape}")
+
+    # 2. Safe git hash (with cwd and try/except)
+    try:
+        git_hash = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ROOT).stdout.strip()
+    except Exception:
+        git_hash = ""
+        
+    # 3. Samples hash
+    with open(args.samples, "rb") as f:
+        samples_hash = hashlib.sha256(f.read()).hexdigest()[:12]
+
+    # 4. Meta.json (using pathlib)
     meta = {
         "ensemble_id": ensemble_id,
         "base": base,
         "max_length": max_length,
-        "share_over_512": float(n_over / max(len(lengths), 1)),
+        "share_over_512": float(share_over_512),
         "n_over_512": n_over,
         "P": len(records),
         "N": len(records[0]["responses"]),
         "K": ms.shape[0],
-        "git_hash": git_hash
+        "git_hash": git_hash,
+        "samples_sha256": samples_hash
     }
-    meta_path = str(args.npz).replace(".npz", ".meta.json")
+    meta_path = pathlib.Path(args.npz).with_suffix(".meta.json")
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
     print(f"wrote meta to {meta_path}")
-
-    Rr, pids, rids = R.scores_tensor(records, ms, keys)
-    np.savez(args.npz, R=Rr, prompt_ids=pids, response_ids=rids)
-    print(f"wrote {args.npz}: R {Rr.shape} (P, N, K), prompt_ids {pids.shape}, response_ids {rids.shape}, "
-          f"NaN entries {int(np.isnan(Rr).sum())}")

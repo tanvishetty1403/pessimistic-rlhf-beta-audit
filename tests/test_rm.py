@@ -166,3 +166,19 @@ def test_bootstrap_idx_range_and_determinism():
     a = R.bootstrap_idx(50, 1)
     assert len(a) == 50 and all(0 <= i < 50 for i in a)
     assert a == R.bootstrap_idx(50, 1) and a != R.bootstrap_idx(50, 2)
+
+
+def test_scores_tensor_raises_on_missing_key():
+    import pytest
+    recs = [
+        {"prompt_id": "p1", "prompt": "q", "responses": [{"response_id": "r1", "clean": "a"}]},
+        {"prompt_id": "p2", "prompt": "q", "responses": [{"response_id": "r2", "clean": "b"}]}
+    ]
+    texts, keys = R.collect_texts(recs)
+
+    bad_keys = [("p1", "r1"), ("p1", "r1")] 
+    
+    with pytest.raises(AssertionError, match="missing/duplicate keys"):
+        R.scores_tensor(recs, np.zeros((2, 2)), bad_keys)
+
+    

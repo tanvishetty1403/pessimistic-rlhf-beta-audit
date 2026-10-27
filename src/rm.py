@@ -255,23 +255,26 @@ def score_rows(keys, member_scores, ensemble_id):
 
 
 def scores_tensor(records, member_scores, keys):
-    """Scatter the [K, M] scores back into R[P, N, K], in file order. Now rectangular and dense (no NaNs)
-    because empties are scored too. Needs the same number of responses N for every prompt."""
+    """Scatter the [K, M] scores back into R[P, N, K], in file order. 
+    Rectangular and dense (no NaNs) because empties are scored too. 
+    Needs the same number of responses N for every prompt."""
     P, K = len(records), member_scores.shape[0]
     N = len(records[0]["responses"])
     if any(len(r["responses"]) != N for r in records):
         raise ValueError("the .npz layout needs the same number of responses for every prompt")
+    
     pos = {(rec["prompt_id"], r["response_id"]): (i, j)
            for i, rec in enumerate(records) for j, r in enumerate(rec["responses"])}
+           
     out = np.full((P, N, K), np.nan, dtype=np.float32)
     for m, key in enumerate(keys):
         i, j = pos[key]
         out[i, j, :] = member_scores[:, m]
     
     assert len(keys) == P * N, f"Expected {P*N} keys, got {len(keys)}"
-    assert not np.isnan(out).any(), "Found NaNs in output! Missing or duplicate keys."
-    
+    assert np.isfinite(out).all(), "missing/duplicate keys, or a non-finite score."
+
     prompt_ids = np.array([rec["prompt_id"] for rec in records])
     response_ids = np.array([[r["response_id"] for r in rec["responses"]] for rec in records])
     
-    return out, prompt_ids, response_ids  
+    return out, prompt_ids, response_ids
