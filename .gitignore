@@ -15,3 +15,5 @@ cache/
 samples/
 figs_smoke/
 figs_tiny/
+rloo_resume/
+*.jsonl
