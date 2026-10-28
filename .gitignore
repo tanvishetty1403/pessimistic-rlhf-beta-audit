@@ -9,3 +9,5 @@ cache/
 .env
 .venv/
 figs_smoke/
+figs_tiny/
+*.jsonl
