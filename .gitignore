@@ -13,3 +13,5 @@ cache/
 .env
 .venv/
 samples/
+figs_smoke/
+figs_tiny/
