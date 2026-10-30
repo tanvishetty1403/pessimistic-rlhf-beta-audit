@@ -1,0 +1,41 @@
+# configs/rloo_smoke.yaml
+model_name: "EleutherAI/pythia-410m"
+dataset_size: 16
+output_root: "runs/rloo_smoke" # per-run dir = <root>/c{c}_b{beta}_s{seed}; use a Drive path in Colab
+hub_repo: null # https://huggingface.co/afml-rlhf/rloo-smoke-ckpt (private): pushes each checkpoint + log.jsonl
+ensemble_mode: "mock" # mock | backbone (backbone = 5 real forwards, for timing)
+
+run_config:
+  c: 1.0
+  beta_policy: 0.05                 # also used as the TRL KL coefficient (RLOOConfig.beta)
+  calibration_scale: 1.0
+  placeholder_stats: true           # smoke test only
+  r_center: 0.0                     # ignored when stats_path is set
+  r_scale: 1.0
+  stats_path: null                  # real runs: frozen std_stats.json, and placeholder_stats must be false
+  ensemble_id: "fake_k5_v1"
+  noise_condition: "noise_off"      # noise_off here is only a label, not a real condition
+
+lora:
+  r: 8
+  lora_alpha: 16
+  target_modules: ["query_key_value"]
+  task_type: "CAUSAL_LM"
+
+rloo_config:                        # passed straight to RLOOConfig (beta comes from run_config)
+  normalize_advantages: false
+  reward_clip_range: null
+  temperature: 1.0
+  num_generations: 4
+  per_device_train_batch_size: 8    # 8 sequences = 2 prompts x 4 generations per step
+  max_completion_length: 128
+  learning_rate: 5.0e-4
+  max_steps: 4
+  logging_steps: 1
+  fp16: false
+  bf16: false
+  save_strategy: "steps"
+  save_steps: 2
+  save_total_limit: 2
+  report_to: "none"
+  seed: 0
