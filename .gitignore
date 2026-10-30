@@ -2,18 +2,27 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 wandb/
+
+# data
 data/*
-!data/splits/
-data/splits/*
 !data/splits/smoke_ids.txt
 !data/splits/manifest.json
+data/splits/*
+
 cache/
 *.pt
 *.safetensors
 .env
 .venv/
 samples/
-figs_smoke/
-figs_tiny/
+
+# figures
+figs_smoke/*
+figs_tiny/*
+figs_pilot20/*
+!figs_smoke/*.json
+!figs_tiny/*.json
+!figs_pilot20/*.json
+
 rloo_resume/
 *.jsonl
