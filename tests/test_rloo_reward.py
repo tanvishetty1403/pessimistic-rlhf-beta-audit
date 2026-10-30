@@ -121,6 +121,14 @@ def test_compute_std_stats_matches_global_convention():
     )
 
 
+def test_compute_std_stats_returns_reference_sample_count():
+    reference = np.random.default_rng(42).normal(size=(400, 5))
+
+    stats_dict = compute_std_stats(reference)
+
+    assert stats_dict["n_ref"] == 400
+
+
 def test_affine_invariance_with_frozen_stats():
     scores = np.array([
         [0.2, 0.4, 0.1, 0.7, 0.3],
@@ -260,14 +268,17 @@ def test_result_shapes_and_raw_scores():
 
 def test_save_and_load_std_stats(tmp_path):
     path = tmp_path / "std_stats.json"
-    stats_dict = {"r_center": 2.5, "r_scale": 1.25}
+    stats_dict = {
+        "r_center": 2.5,
+        "r_scale": 1.25,
+        "n_ref": 200,
+    }
 
     saved = save_std_stats(
         path,
         stats_dict,
         ensemble_id="k5-noise-off",
         noise_condition="noise_off",
-        n_ref=200,
     )
 
     loaded = load_std_stats(path)
@@ -286,31 +297,24 @@ def test_save_std_stats_rejects_invalid_noise_condition(tmp_path):
     with pytest.raises(ValueError, match="noise_condition"):
         save_std_stats(
             tmp_path / "bad.json",
-            {"r_center": 0.5, "r_scale": 1.0},
+            {
+                "r_center": 0.5,
+                "r_scale": 1.0,
+                "n_ref": 200,
+            },
             ensemble_id="k5",
             noise_condition="unknown",
-            n_ref=200,
         )
 
 
-def test_loader_rejects_missing_provenance(tmp_path):
-    path = tmp_path / "std_stats.json"
-    path.write_text(
-        json.dumps({
-            "r_center": 0.0,
-            "r_scale": 1.0,
-            "ensemble_id": "k5",
-            "noise_condition": "noise_off",
-            "n_ref": 200,
-        }),
-        encoding="utf-8",
-    )
-
-    # The file has complete fields, but these are placeholder values.
-    # Loading is allowed; using them in a reward call is what is guarded.
-    loaded = load_std_stats(path)
-    assert loaded.r_center == 0.0
-    assert loaded.r_scale == 1.0
+def test_save_std_stats_rejects_missing_n_ref(tmp_path):
+    with pytest.raises(ValueError, match="n_ref"):
+        save_std_stats(
+            tmp_path / "bad.json",
+            {"r_center": 0.5, "r_scale": 1.0},
+            ensemble_id="k5",
+            noise_condition="noise_off",
+        )
 
 
 def test_loader_rejects_bad_scale(tmp_path):
@@ -475,4 +479,12 @@ def test_mean_baseline_rejects_placeholder_without_permission():
         compute_mean_reward(
             [0.1, 0.2, 0.3, 0.4, 0.5],
             stats=make_stats(center=0.0, scale=1.0),
+        )
+def test_std_stats_rejects_empty_ensemble_id():
+    with pytest.raises(ValueError, match="ensemble_id"):
+        StdStats(
+            r_center=0.5,
+            r_scale=1.0,
+            ensemble_id="",
+            noise_condition="noise_off",
         )

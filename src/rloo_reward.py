@@ -118,6 +118,9 @@ def _validate_stats(
     if not isinstance(stats, StdStats):
         raise TypeError("stats must be a StdStats instance")
 
+    # Value-based detection is intentional for smoke-test placeholders.
+    # A real reference distribution could theoretically produce exactly
+    # (0.0, 1.0), in which case it would also be classified as a placeholder.
     is_placeholder = stats.r_center == 0.0 and stats.r_scale == 1.0
 
     if is_placeholder and not allow_placeholder_stats:
@@ -135,12 +138,18 @@ def _validate_stats(
     return is_placeholder
 
 
-def compute_std_stats(R_ref: ArrayLike) -> dict[str, float]:
-    """Fit global center/scale from reference ensemble scores.
+def compute_std_stats(R_ref: ArrayLike) -> dict[str, float | int]:
+    """Fit global center/scale and count reference samples.
 
     R_ref has shape (..., K). Compute the ensemble mean over K first,
     then fit one global center and population standard deviation over
     all reference samples.
+
+    Returns:
+        A dictionary containing:
+        - r_center: Global mean of reference ensemble means.
+        - r_scale: Population standard deviation of reference ensemble means.
+        - n_ref: Number of reference samples used to fit the statistics.
 
     This mirrors the global standardization convention in
     g1_g3_plots.py. Call this only on designated reference data.
@@ -159,13 +168,18 @@ def compute_std_stats(R_ref: ArrayLike) -> dict[str, float]:
     ensemble_means = scores.mean(axis=-1).reshape(-1)
     center = float(ensemble_means.mean())
     scale = float(ensemble_means.std(ddof=0))
+    n_ref = int(ensemble_means.size)
 
     if not np.isfinite(scale) or scale <= 0:
         raise ValueError(
             "Reference ensemble-mean standard deviation must be positive"
         )
 
-    return {"r_center": center, "r_scale": scale}
+    return {
+        "r_center": center,
+        "r_scale": scale,
+        "n_ref": n_ref,
+    }
 
 
 def save_std_stats(
@@ -173,22 +187,27 @@ def save_std_stats(
     stats_dict: dict,
     ensemble_id: str,
     noise_condition: str,
-    n_ref: int,
 ) -> StdStats:
     """Validate and save frozen statistics with their provenance."""
     if not isinstance(stats_dict, dict):
         raise TypeError("stats_dict must be a dictionary")
 
-    if not isinstance(n_ref, int) or isinstance(n_ref, bool) or n_ref <= 0:
-        raise ValueError("n_ref must be a positive integer")
-
-    required = {"r_center", "r_scale"}
+    required = {"r_center", "r_scale", "n_ref"}
     missing = required - stats_dict.keys()
 
     if missing:
         raise ValueError(
             f"stats_dict is missing required fields: {sorted(missing)}"
         )
+
+    n_ref = stats_dict["n_ref"]
+
+    if (
+        not isinstance(n_ref, (int, np.integer))
+        or isinstance(n_ref, (bool, np.bool_))
+        or n_ref <= 0
+    ):
+        raise ValueError("n_ref must be a positive integer")
 
     stats = StdStats(
         r_center=float(stats_dict["r_center"]),
@@ -202,7 +221,7 @@ def save_std_stats(
         "r_scale": stats.r_scale,
         "ensemble_id": stats.ensemble_id,
         "noise_condition": stats.noise_condition,
-        "n_ref": n_ref,
+        "n_ref": int(n_ref),
     }
 
     output_path = Path(path)
@@ -310,7 +329,11 @@ def compute_mean_reward(
     expected_members: int = EXPECTED_MEMBERS,
     allow_placeholder_stats: bool = False,
 ) -> NDArray[np.float64]:
-    """Return the mean baseline using the same frozen normalization."""
+    """Return the mean baseline using the same frozen normalization.
+
+    Use the exact same StdStats instance for the Mean baseline and
+    pessimistic reward runs.
+    """
     scores = _validate_scores(member_scores, expected_members)
     _validate_stats(stats, allow_placeholder_stats)
 
