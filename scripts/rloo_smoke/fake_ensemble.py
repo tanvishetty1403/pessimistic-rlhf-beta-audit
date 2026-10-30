@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.rloo_reward import compute_ensemble_reward
+from src.rloo_reward import compute_ensemble_reward, StdStats, load_std_stats
 
 K = 5
 STATS: dict = {}          # step -> list of per-call dicts
@@ -42,22 +42,17 @@ def pop_step_stats(step):
 
 
 def resolve_stats(rc):
-    """Frozen normalization for this run. Real runs must come from stats_path."""
     path = rc.get("stats_path")
     if path:
         if rc.get("placeholder_stats"):
             raise ValueError("stats_path is set but placeholder_stats is true")
-        from src.rloo_reward import load_std_stats
-        center, scale, ens, noise = load_std_stats(path)
-        return dict(r_center=center, r_scale=scale, ensemble_id=ens,
-                    noise_condition=noise, placeholder_stats=False)
+        return load_std_stats(path) # StdStats, no tuple unpack
     if not rc.get("placeholder_stats"):
         raise ValueError("No stats_path and placeholder_stats is false: refusing to run "
                          "with unfrozen normalization")
-    if rc["r_center"] != 0.0 or rc["r_scale"] != 1.0:
-        raise ValueError("placeholder stats must be r_center=0, r_scale=1")
-    return dict(r_center=0.0, r_scale=1.0, placeholder_stats=True,
-                ensemble_id=rc["ensemble_id"], noise_condition=rc["noise_condition"])
+    return StdStats(r_center=0.0, r_scale=1.0,
+                    ensemble_id=rc["ensemble_id"],
+                    noise_condition=rc["noise_condition"])   # must be noise_on/noise_off
 
 
 # scorers
@@ -105,7 +100,7 @@ class BackboneScorer:
 
 
 # reward fn
-def make_reward_fn(rc, scorer):
+def make_reward_fn(rc, scorer, stats):
     """Returns reward_fn(prompts, completions, **kw) -> list[float] (r~ only, no KL)."""
 
     def ensemble_reward_fn(prompts, completions, **kwargs):
@@ -116,10 +111,9 @@ def make_reward_fn(rc, scorer):
         res = compute_ensemble_reward(
             scores,
             beta_policy=rc["beta_policy"], c=rc["c"],
-            r_center=rc["r_center"], r_scale=rc["r_scale"],
+            stats=stats,
             calibration_scale=rc.get("calibration_scale", 1.0),
             allow_placeholder_stats=rc["placeholder_stats"],
-            ensemble_id=rc["ensemble_id"], noise_condition=rc["noise_condition"],
         )
 
         state = kwargs.get("trainer_state")
@@ -131,6 +125,7 @@ def make_reward_fn(rc, scorer):
             penalty_mean=float(res.penalty.mean()),
             r_tilde_mean=float(res.pessimistic_reward.mean()),
             rm_sec=rm_sec,
+            placeholder_stats=bool(res.placeholder_stats),
         ))
         return [float(x) for x in res.pessimistic_reward]
 

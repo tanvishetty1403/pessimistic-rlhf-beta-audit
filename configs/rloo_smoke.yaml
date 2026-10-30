@@ -14,7 +14,7 @@ run_config:
   r_scale: 1.0
   stats_path: null                  # real runs: frozen std_stats.json, and placeholder_stats must be false
   ensemble_id: "fake_k5_v1"
-  noise_condition: "smoke_placeholder"
+  noise_condition: "noise_off"      # noise_off here is only a label, not a real condition
 
 lora:
   r: 8

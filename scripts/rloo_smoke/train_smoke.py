@@ -132,7 +132,12 @@ def main():
     a = ap.parse_args()
 
     cfg = yaml.safe_load(open(a.config))
-    rc = {**cfg["run_config"], **FE.resolve_stats(cfg["run_config"])}   # frozen/placeholder stats resolved
+    stats = FE.resolve_stats(cfg["run_config"])
+    rc = {**cfg["run_config"],
+        "placeholder_stats": stats.r_center == 0.0 and stats.r_scale == 1.0 and cfg["run_config"]["placeholder_stats"],
+        "ensemble_id": stats.ensemble_id,
+        "noise_condition": stats.noise_condition,
+        "r_center": stats.r_center, "r_scale": stats.r_scale}
     seed = cfg["rloo_config"]["seed"]
     run_name = f"c{rc['c']:g}_b{rc['beta_policy']:g}_s{seed}"
     out_root = Path(cfg["output_root"])
@@ -169,7 +174,7 @@ def main():
         scorer = FE.BackboneScorer(cfg["model_name"])
     else:
         raise ValueError("ensemble_mode must be mock or backbone")
-    reward_fn = FE.make_reward_fn(rc, scorer)
+    reward_fn = FE.make_reward_fn(rc, scorer, stats)
 
     args = RLOOConfig(output_dir=str(out_dir), beta=rc["beta_policy"], **cfg["rloo_config"])
     rl = cfg["rloo_config"]
