@@ -73,8 +73,12 @@ def check_resume(out_dir, manifest, ckpt=None, allow=()):
     if ckpt:
         ts = Path(ckpt) / "trainer_state.json"
         if ts.exists():
-            ms = json.loads(ts.read_text()).get("max_steps")
+            st = json.loads(ts.read_text())
+            ms, done = st.get("max_steps"), st.get("global_step")
             now = manifest["body"]["rloo_config"].get("max_steps")
+            if done is not None and now is not None and int(done) >= int(now):
+                rows.append(f"  checkpoint is at step {done} >= max_steps {now}: run already finished, "
+                            f"resume would extend it (never do that)")
             if ms is not None and now is not None and int(ms) != int(now):
                 rows.append(f"  trainer_state.max_steps: checkpoint={ms} now={now}  (changes the LR schedule)")
     if rows:

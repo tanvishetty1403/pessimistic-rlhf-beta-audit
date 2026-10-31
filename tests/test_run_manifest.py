@@ -60,3 +60,14 @@ def test_allow_override(tmp_path):
     c2 = copy.deepcopy(CFG)
     c2["lora"]["r"] = 16
     RM.check_resume(tmp_path, RM.build_manifest(c2, ST), allow=("lora.",))
+
+
+def test_finished_run_refused(tmp_path):
+    RM.write_manifest(tmp_path, RM.build_manifest(CFG, ST))
+    ck = tmp_path / "checkpoint-4"
+    ck.mkdir()
+    (ck / "trainer_state.json").write_text(json.dumps({"max_steps": 4, "global_step": 4}))
+    with pytest.raises(SystemExit):
+        RM.check_resume(tmp_path, RM.build_manifest(CFG, ST), ckpt=ck)
+    (ck / "trainer_state.json").write_text(json.dumps({"max_steps": 4, "global_step": 2}))
+    RM.check_resume(tmp_path, RM.build_manifest(CFG, ST), ckpt=ck)
