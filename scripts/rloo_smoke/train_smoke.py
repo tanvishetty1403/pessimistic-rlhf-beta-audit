@@ -27,6 +27,7 @@ from peft import LoraConfig
 from transformers import AutoTokenizer, TrainerCallback
 from transformers.trainer_utils import get_last_checkpoint
 from trl import RLOOConfig, RLOOTrainer
+import run_manifest as RM
 
 ROOT = Path(__file__).resolve().parents[2]
 for p in (str(ROOT), str(Path(__file__).resolve().parent)):
@@ -111,6 +112,8 @@ class HubSync(TrainerCallback):
         ck = Path(args.output_dir) / f"checkpoint-{state.global_step}"
         try:
             self.api.upload_folder(folder_path=str(ck), repo_id=self.repo, path_in_repo=f"{self.run}/{ck.name}")
+            self.api.upload_file(path_or_fileobj=str(self.log.parent / RM.NAME),
+                     repo_id=self.repo, path_in_repo=f"{self.run}/{RM.NAME}")
             if self.log.exists():
                 self.api.upload_file(path_or_fileobj=str(self.log), repo_id=self.repo,
                                      path_in_repo=f"{self.run}/log.jsonl")
@@ -154,6 +157,12 @@ def main():
         raise SystemExit(f"--resume given but no checkpoint found in {out_dir}")
     if not a.resume and ckpt is not None:
         raise SystemExit(f"{out_dir} already has {Path(ckpt).name}; pass --resume or change the config")
+
+    manifest = RM.build_manifest(cfg, stats, extra={"prompt_pool_sha256": None}) # fill when the pool file exists
+    if a.resume:
+        RM.check_resume(out_dir, manifest, ckpt) # after restore_from_hub
+    else:
+        RM.write_manifest(out_dir, manifest)
 
     git_commit, git_dirty = git_info()
     identity = {
