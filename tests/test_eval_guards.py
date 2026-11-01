@@ -78,3 +78,16 @@ def test_n_clean_tokens_marker_cut():
 
 def test_n_clean_tokens_empty():
     assert E.n_clean_tokens(FakeTok(), ["Human:", " x"], "") == 0
+
+def test_kl_tokens_eos_no_marker():
+    assert E.kl_token_count(5, True, False) == 6        # EOS counted
+
+def test_kl_tokens_cap_no_marker():
+    assert E.kl_token_count(128, False, False) == 128   # no EOS, all tokens
+
+def test_kl_tokens_marker_excludes_eos():
+    g = ["hello", " world", " Human:", " x"]
+    assert E.kl_token_count(4, True, True, FakeTok(), g, "hello world") == 2
+
+def test_kl_tokens_empty():
+    assert E.kl_token_count(3, True, True, FakeTok(), ["Human:", " x", "!"], "") == 0

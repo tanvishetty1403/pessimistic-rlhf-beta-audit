@@ -113,6 +113,11 @@ def load_model(policy, adapter_dir, device, revision):
     return model, tok
 
 
+def kl_token_count(n_gen, has_eos, hit_marker, tok=None, g=None, clean=""):
+    k = n_gen if not hit_marker else n_clean_tokens(tok, g[:n_gen], clean)
+    return k + (1 if (has_eos and not hit_marker) else 0)
+
+
 def gen_one_prompt(model, tok, prompt, n, seed, max_new, device, has_adapter):
     import torch
     from src.data import clean3, prompt_id
@@ -145,8 +150,7 @@ def gen_one_prompt(model, tok, prompt, n, seed, max_new, device, has_adapter):
         raw = tok.decode(g, skip_special_tokens=True)
         clean = clean3(raw)
         hit_marker = clean != raw.strip()
-        k = n_gen if not hit_marker else n_clean_tokens(tok, g[:n_gen], clean)
-        kt = k + (1 if (has_eos and not hit_marker) else 0)
+        kt = kl_token_count(n_gen, has_eos, hit_marker, tok, g, clean)
         rows.append({"prompt_id": pid, "j": i, "clean": clean, "n_gen": n_gen, "n_kl_tokens": kt,
                      "kl_seq": float(d[i, :kt].sum()), "kl_seq_full": float(d[i, :n_gen + int(has_eos)].sum()),
                      "eos": has_eos, "hit_length": not has_eos, "hit_marker": hit_marker, "empty": clean == ""})
