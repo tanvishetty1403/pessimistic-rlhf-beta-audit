@@ -40,16 +40,54 @@ def key_of(prompt, clean):
     return hashlib.sha1((prompt + "\x00" + clean).encode()).hexdigest()
 
 
+def prompts_sha(prompts):
+    from src.data import prompt_id
+    return hashlib.sha256("\n".join(prompt_id(p) for p in prompts).encode()).hexdigest()
+
+
+def check_meta(out, prompts):
+    mp = pathlib.Path(out) / "eval_meta.json"
+    if not mp.exists():
+        sys.exit(f"{mp} missing: run gen first")
+    got, want = prompts_sha(prompts), json.load(open(mp))["prompt_sha256"]
+    if got != want:
+        sys.exit(f"prompt set differs from gen's ({got[:12]} vs {want[:12]}): check --prompts/--n-prompts or use a new --out")
+
+
+def resolve_commit(repo, revision):
+    from huggingface_hub import model_info
+    return model_info(repo, revision=revision).sha
+
+
+def gold_id(a):
+    if a.mock_gold:
+        return "MOCK"
+    if not a.gold_revision:
+        sys.exit("--gold-revision is required for real gold scoring")
+    from gold_score import GOLD_MODEL
+    return f"{GOLD_MODEL}@{resolve_commit(GOLD_MODEL, a.gold_revision)}"
+
+
+def load_gold_cache(path, gid):
+    cache = {}
+    if path.exists():
+        for l in open(path):
+            if l.strip():
+                d = json.loads(l)
+                if d.get("gold_model") != gid:
+                    sys.exit(f"{path.name}: entry from {d.get('gold_model')!r}, expected {gid!r}. Use a new --out.")
+                cache[d["k"]] = d["gold"]
+    return cache
+
+
 def load_prompts(path, n):
     from src import sampling as S
     from src.data import load_split
-    S.check_prompts_path(path)                     # test split stays frozen
+    S.check_prompts_path(path)
     return load_split(path, "tune")[:n]
 
 
-# gen
 def n_clean_tokens(tok, g, clean):
-    """Smallest k such that decode(g[:k]) covers the clean text."""
     if not clean:
         return 0
     L, lo, hi = len(clean), 0, len(g)
@@ -62,13 +100,13 @@ def n_clean_tokens(tok, g, clean):
     return lo
 
 
-def load_model(policy, adapter_dir, device):
+def load_model(policy, adapter_dir, device, revision):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    tok = AutoTokenizer.from_pretrained(policy)
+    tok = AutoTokenizer.from_pretrained(policy, revision=revision)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
-    model = AutoModelForCausalLM.from_pretrained(policy, dtype=torch.float32).to(device).eval()
+    model = AutoModelForCausalLM.from_pretrained(policy, revision=revision, dtype=torch.float32).to(device).eval()
     if adapter_dir:
         from peft import PeftModel
         model = PeftModel.from_pretrained(model, adapter_dir).to(device).eval()
@@ -123,25 +161,33 @@ def stage_gen(a):
     run = pathlib.Path(a.run_dir).name
     prompts = load_prompts(a.prompts, a.n_prompts)
     meta = {"policy": a.policy, "prompts": a.prompts, "n_prompts": a.n_prompts, "n": a.n, "seed": a.seed,
-            "max_new": a.max_new, "dtype": "float32"}
+            "max_new": a.max_new, "dtype": "float32",
+            "prompt_sha256": prompts_sha(prompts), "policy_revision": a.policy_revision,
+            "policy_commit": resolve_commit(a.policy, a.policy_revision)}
     mp = out / "eval_meta.json"
     if mp.exists() and json.load(open(mp)) != meta:
         sys.exit(f"{mp} differs from these arguments: use a new --out")
     json.dump(meta, open(mp, "w"), indent=2)
-    for step in [int(s) for s in a.steps.split(",")]:
+    steps = [int(s) for s in a.steps.split(",")]
+    ckdir = lambda s: pathlib.Path(a.run_dir) / f"checkpoint-{s}"
+    missing = [s for s in steps if s != 0 and not ckdir(s).is_dir()]
+    if missing:
+        sys.exit(f"missing checkpoints for steps {missing} in {a.run_dir}: restore from Hub or drop them from --steps")
+    for step in steps:
         dest = out / f"gen_{run}_s{step}.jsonl"
+        ad = None if step == 0 else str(ckdir(step))
+        ck = "base" if ad is None else hashlib.sha256((ckdir(step) / "adapter_model.safetensors").read_bytes()).hexdigest()
+        side = dest.with_suffix(".ckpt")
         if dest.exists():
+            if not side.exists() or side.read_text().strip() != ck:
+                sys.exit(f"{dest.name} came from a different/unknown checkpoint: use a new --out")
             print("skip", dest.name)
             continue
-        ad = None if step == 0 else str(pathlib.Path(a.run_dir) / f"checkpoint-{step}")
-        if ad and not os.path.isdir(ad):
-            print(f"!! {ad} missing, skipping step {step}")
-            continue
-        model, tok = load_model(a.policy, ad, device)
+        model, tok = load_model(a.policy, ad, device, a.policy_revision)
         rows = []
         for p in prompts:
             if int(tok(p, return_tensors="pt")["input_ids"].shape[1]) > 1900:
-                continue                                    # same skip rule as the offline cache
+                continue
             for r in gen_one_prompt(model, tok, p, a.n, a.seed, a.max_new, device, ad is not None):
                 r.update(run=run, step=step)
                 rows.append(r)
@@ -149,13 +195,13 @@ def stage_gen(a):
         with open(tmp, "w") as f:
             for r in rows:
                 f.write(json.dumps(r) + "\n")
+        side.write_text(ck)
         os.replace(tmp, dest)
         print(f"{dest.name}: {len(rows)} samples, mean kl_seq {sum(r['kl_seq'] for r in rows) / len(rows):.3f}")
         del model
         torch.cuda.empty_cache()
 
 
-# gold
 def read_gen(out):
     rows = []
     for f in sorted(glob.glob(str(pathlib.Path(out) / "gen_*.jsonl"))):
@@ -166,21 +212,19 @@ def read_gen(out):
 def stage_gold(a):
     out = pathlib.Path(a.out)
     cache_path = out / ("gold_cache_MOCK.jsonl" if a.mock_gold else "gold_cache.jsonl")
-    cache = {}
-    if cache_path.exists():
-        for l in open(cache_path):
-            if l.strip():
-                d = json.loads(l)
-                cache[d["k"]] = d["gold"]
+    gid = gold_id(a)
+    cache = load_gold_cache(cache_path, gid)
     prompts = {}
     from src.data import prompt_id
-    for p in load_prompts(a.prompts, a.n_prompts):
+    plist = load_prompts(a.prompts, a.n_prompts)
+    check_meta(out, plist)
+    for p in plist:
         prompts[prompt_id(p)] = p
     todo = {}
     for r in read_gen(out):
         k = key_of(prompts[r["prompt_id"]], r["clean"])
         if k not in cache:
-            todo[k] = prompts[r["prompt_id"]] + " " + r["clean"]       # same format as gold_score.run_cache
+            todo[k] = prompts[r["prompt_id"]] + " " + r["clean"]
     print(f"{len(cache)} cached, {len(todo)} to score")
     if not todo:
         return
@@ -188,27 +232,24 @@ def stage_gold(a):
     if a.mock_gold:
         scores = [(int(hashlib.sha1(k.encode()).hexdigest()[:8], 16) / 2**32 - 0.5) * 4 for k in keys]
     else:
-        from gold_score import load_gold, score, GOLD_MODEL
-        tok, rm = load_gold()
+        from gold_score import load_gold, score
+        tok, rm = load_gold(revision=a.gold_revision)
         scores = []
-        with open(cache_path, "a") as f:                                 # flush per block: Colab can die
+        with open(cache_path, "a") as f:
             for i in range(0, len(keys), 512):
                 blk = keys[i:i + 512]
                 s = score(tok, rm, [todo[k] for k in blk], bs=a.bs)
                 for k, v in zip(blk, s):
-                    f.write(json.dumps({"k": k, "gold": float(v), "gold_model": GOLD_MODEL}) + "\n")
+                    f.write(json.dumps({"k": k, "gold": float(v), "gold_model": gid}) + "\n")
                 f.flush()
                 scores += s
         return
     with open(cache_path, "a") as f:
         for k, v in zip(keys, scores):
-            f.write(json.dumps({"k": k, "gold": float(v), "gold_model": "MOCK"}) + "\n")
+            f.write(json.dumps({"k": k, "gold": float(v), "gold_model": gid}) + "\n")
 
 
-# plot
 def summarize(df):
-    """df columns: run, step, prompt_id, kl_seq, gold, n_gen, eos, hit_length, hit_marker, empty.
-    Per-prompt means first, then mean over prompts (prompt is the unit for later bootstrap)."""
     cols = ["kl_seq", "gold", "n_gen", "eos", "hit_length", "hit_marker", "empty"]
     pp = df.groupby(["run", "step", "prompt_id"])[cols].mean().reset_index()
     sm = pp.groupby(["run", "step"])[cols].mean().reset_index()
@@ -220,13 +261,13 @@ def stage_plot(a):
     import pandas as pd
     out = pathlib.Path(a.out)
     cache_path = out / ("gold_cache_MOCK.jsonl" if a.mock_gold else "gold_cache.jsonl")
-    gold = {}
-    for l in open(cache_path):
-        if l.strip():
-            d = json.loads(l)
-            gold[d["k"]] = d["gold"]
+    
+    gold = load_gold_cache(cache_path, gold_id(a))
+    
     from src.data import prompt_id
-    prompts = {prompt_id(p): p for p in load_prompts(a.prompts, a.n_prompts)}
+    plist = load_prompts(a.prompts, a.n_prompts)
+    check_meta(out, plist)
+    prompts = {prompt_id(p): p for p in plist}
     rows = read_gen(out)
     for r in rows:
         r["gold"] = gold.get(key_of(prompts[r["prompt_id"]], r["clean"]))
@@ -236,6 +277,14 @@ def stage_plot(a):
         print(f"!! {miss} samples have no gold score yet (run the gold stage); dropping them")
         df = df.dropna(subset=["gold"])
     pp, sm = summarize(df)
+    by_run = sm.groupby("run")["step"].apply(lambda s: tuple(sorted(s)))
+    incomplete = False
+    if by_run.nunique() != 1 or sm["n_prompts"].nunique() != 1:
+        msg = f"INCOMPLETE: steps per run {by_run.to_dict()}, n_prompts {sorted(sm['n_prompts'].unique())}"
+        if not a.allow_incomplete:
+            sys.exit(msg)
+        print("!!", msg)
+        incomplete = True
     pp.to_csv(out / "per_prompt.csv", index=False)
     sm.to_csv(out / "summary.csv", index=False)
     import matplotlib
@@ -249,7 +298,7 @@ def stage_plot(a):
         ax.plot(g["kl_seq"], g["gold"], marker="o", ms=3, label=lab)
     ax.set_xlabel("KL(policy || SFT ref), nats per sequence (k1, fp32)")
     ax.set_ylabel("mean gold reward (raw)")
-    ax.set_title("RLOO: gold vs KL (directional only, 2 seeds, no CI)")
+    ax.set_title(("INCOMPLETE - " if incomplete else "") + "RLOO: gold vs KL (directional only, 2 seeds, no CI)")
     ax.legend(fontsize=7)
     fig.tight_layout()
     fig.savefig(out / "gold_vs_kl.png", dpi=150)
@@ -266,13 +315,17 @@ if __name__ == "__main__":
         p.add_argument("--n-prompts", type=int, default=200)
         if name == "gen":
             p.add_argument("--policy", required=True, help="SFT policy (HF repo or path); the LoRA base")
+            p.add_argument("--policy-revision", required=True)
             p.add_argument("--run-dir", required=True)
             p.add_argument("--steps", required=True, help="comma list, 0 = SFT policy itself")
             p.add_argument("--n", type=int, default=4)
             p.add_argument("--seed", type=int, default=0)
             p.add_argument("--max-new", type=int, default=128)
         else:
+            p.add_argument("--gold-revision", default=None)
             p.add_argument("--mock-gold", action="store_true", help="plumbing test only; writes a separate cache")
             p.add_argument("--bs", type=int, default=8)
+            if name == "plot":
+                p.add_argument("--allow-incomplete", action="store_true")
     a = ap.parse_args()
     {"gen": stage_gen, "gold": stage_gold, "plot": stage_plot}[a.cmd](a)

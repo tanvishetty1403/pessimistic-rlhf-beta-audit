@@ -83,3 +83,11 @@ def check_resume(out_dir, manifest, ckpt=None, allow=()):
                 rows.append(f"  trainer_state.max_steps: checkpoint={ms} now={now}  (changes the LR schedule)")
     if rows:
         raise SystemExit("--resume refused, config differs from the run that wrote the checkpoint:\n" + "\n".join(rows))
+
+def pool_identity(cfg, real_run):
+    p = cfg.get("prompt_pool_manifest")
+    if p is None:
+        if real_run:
+            raise SystemExit("real run: set prompt_pool_manifest (path to rloo_pool_manifest.json)")
+        return None
+    return _file_sha(p)

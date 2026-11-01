@@ -28,11 +28,11 @@ GOLD_MODEL = "Skywork/Skywork-Reward-V2-Llama-3.2-3B"
 MAX_LEN = 2048
 
 
-def load_gold(model_name=GOLD_MODEL, device="cuda:0", dtype=torch.float16):
-    tok = AutoTokenizer.from_pretrained(model_name)
+def load_gold(model_name=GOLD_MODEL, device="cuda:0", dtype=torch.float16, revision=None):
+    tok = AutoTokenizer.from_pretrained(model_name, revision=revision)
     tok.truncation_side = "left"  # if anything is cut, keep the response end
     rm = AutoModelForSequenceClassification.from_pretrained(
-        model_name, torch_dtype=dtype, device_map={"": device},
+        model_name, revision=revision, torch_dtype=dtype, device_map={"": device},
         attn_implementation="sdpa", num_labels=1,
     ).eval()
     # pad token must not be a token that appears in the text

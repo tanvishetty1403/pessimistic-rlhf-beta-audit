@@ -7,7 +7,7 @@ RLOO smoke test: generate -> K=5 reward (r~ only) -> KL (TRL) -> update -> check
 
 Notes
 - TRL RLOO: reward = r~ - beta * KL_seq (sequence-summed k1). beta = run_config.beta_policy.
-- The logged TRL `kl` is a per-token mean; kl_seq = kl * completions/mean_length.
+- The logged TRL `kl` is a per-token mean; kl_seq = kl * mean_length.
 - The logged TRL `reward` is PRE-KL. reward_post_kl = reward_pre_kl - beta * kl_seq.
 """
 import argparse
@@ -158,7 +158,8 @@ def main():
     if not a.resume and ckpt is not None:
         raise SystemExit(f"{out_dir} already has {Path(ckpt).name}; pass --resume or change the config")
 
-    manifest = RM.build_manifest(cfg, stats, extra={"prompt_pool_sha256": None}) # fill when the pool file exists
+    real_run = not rc["placeholder_stats"]
+    manifest = RM.build_manifest(cfg, stats, extra={"prompt_pool_manifest_sha256": RM.pool_identity(cfg, real_run)})
     if a.resume:
         RM.check_resume(out_dir, manifest, ckpt) # after restore_from_hub
     else:
