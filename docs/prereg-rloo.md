@@ -32,7 +32,7 @@ The primary experiment consists of six runs:
 
 \]
 
-Seed values: [TO BE LOCKED]
+Seed values: 0 and 1 (locked before the learning-rate pilot; both seeds must be used for all three c values).
 
 The same \(\beta_{\text{policy}}\), policy checkpoint, reward ensemble, noise condition, frozen normalization statistics, and training budget must be used across all six primary runs. Only \(c\) and the preregistered seed may vary.
 
@@ -138,7 +138,7 @@ The checkpoint-evaluation set is the same fixed 200 tuning prompts used by the o
 
 The RLOO training and pilot prompts must be disjoint from the 200 checkpoint-evaluation prompts by construction. The test split remains frozen and is not used for training, pilot selection, checkpoint selection, or interim decisions.
 
-The exact RLOO training-pool IDs must be deterministically ordered in hash order and saved as a versioned manifest. Each run uses the first M prompts from that manifest, where M is determined by the locked training steps and prompts consumed per step. The selected IDs and manifest hash must be recorded before the six-run experiment.
+The exact RLOO training-pool IDs must be deterministically ordered in hash order and saved as a versioned manifest. Each run uses the first M prompts from that manifest, where M is determined by the locked training steps and prompts consumed per step. Before the six-run experiment, record both the SHA-256 of the ordered training-pool prompt IDs (using the ordered-ID hash recorded in the pool manifest) and the SHA-256 of the complete pool-manifest file. These are distinct hashes: the former identifies the ordered prompt IDs, while the latter identifies the manifest artifact itself.
 
 3.4 Test split
 
@@ -353,6 +353,7 @@ Proposed learning-rate rule: Select the largest candidate learning rate for whic
 Before the pilot begins, the team must also lock:
 
 - Maximum acceptable median sequence-summed training k1 KL over steps 81–100: 2.0 nats per sequence (proposed; requires team approval before the pilot).
+Approval record: The team's decision to adopt or replace the proposed 2.0-nat upper guard must be recorded in the PR #8 discussion thread before the pilot begins. The record must identify the approving team member(s), the approval date (YYYY-MM-DD), and the final accepted upper threshold. The pilot must not begin until this approval record is present.
 
 - Gradient norm and loss-stability diagnostics must be logged and reported. They are not additional pass/fail gates unless their thresholds and measurement conventions are explicitly approved and frozen before the pilot.
 
@@ -386,15 +387,15 @@ Before the six-run experiment begins, the training implementation must provide a
 
 - Training configuration, including `max_steps`.
 
-- Training-pool prompt manifest and SHA-256, recorded as an identity-critical field (for example, `prompt_manifest_sha256`).
+- Training-pool manifest file SHA-256, recorded as the identity-critical field `prompt_pool_manifest_sha256`. This is the SHA-256 of the complete `rloo_pool_manifest.json` file; it is not the hash of the ordered prompt IDs. The ordered training-pool prompt-ID SHA-256 is recorded separately in the pool manifest and reported in section 3.5.
 
 A resumed run must refuse to continue if its run manifest is missing or if any identity-critical setting differs from the saved manifest. In particular, a mismatch in `max_steps` must prevent resumption.
 
-The run manifest must be saved with the checkpoint and made available through the experiment's Hub artifacts. The `prompt_manifest_sha256` value must be passed into `build_manifest` through its `extra=` argument and included in identity validation. This code-level field wiring must be verified before the real six-run experiment; a `None` placeholder is not acceptable for a production run.
+The run manifest must be saved with the checkpoint and made available through the experiment's Hub artifacts. The `prompt_pool_manifest_sha256` value is passed into `build_manifest` through its `extra=` argument and included in identity validation. This verifies that the expected pool-manifest file was supplied and that its file identity is preserved across resume; it does not verify that the prompts actually loaded by the training process match the ordered prompt IDs in that manifest. A real-loader check comparing the loaded prompt IDs with the manifest's ordered-ID hash remains pending and must pass before the real six-run experiment. A `None` placeholder is not acceptable for a production run.
 
 The Git commit should be recorded as provenance metadata but excluded from the identity hash, so that unrelated documentation or non-identity code commits do not prevent a valid resume.
 
-Implementation status: The run-level manifest generation, resume identity validation, mismatch rejection, and Hub persistence are implemented in the branch documented in PR #9. The reported Kaggle evidence covers changed-`max_steps` refusal, finished-run refusal, successful Hub resume, and missing-manifest refusal. The prompt-manifest SHA-256 must additionally be wired into the build_manifest(..., extra=...) call and verified as an identity-critical field before the real experiment.
+Implementation status: The `prompt_pool_manifest_sha256` field is wired into the run manifest through `build_manifest(..., extra=...)` and is included in identity validation. The field hashes the complete `rloo_pool_manifest.json` file, not the ordered prompt IDs. The reported PR #9 implementation and Kaggle evidence cover changed-`max_steps` refusal, finished-run refusal, successful Hub resume, and missing-manifest refusal. Verification that the actual prompts loaded by the real training loader match the ordered prompt IDs in the pool manifest remains pending because `train_smoke.py` still uses synthetic prompts. This real-loader verification is required before the six-run experiment.
 
 6. KL Measurement and Checkpoint Evaluation
 
@@ -412,7 +413,7 @@ At every evaluation checkpoint:
 
 3. Use the SFT v1 policy (`afml-rlhf/sft-policy`) as the reference: the same model checkpoint with the LoRA adapter disabled.
 
-4. Estimate policy KL in FP32 using the k1 estimator. The primary `kl_seq` sums over exactly the response tokens visible to the gold scorer: the clean3 prefix, plus the EOS token only when generation actually terminated by emitting EOS and no clean3 marker cut occurred. Reaching the maximum generation length, stopping at a clean3 marker, or otherwise ending without an emitted EOS does not qualify as an EOS-ended reply. The clean3 character-level cut is mapped to a token index by decoding successive token prefixes and locating the prefix corresponding to the cleaned response; this mapping is approximate when clean3 removes a trailing label or other text that does not align exactly with token boundaries. Apply the same token mask and completion-boundary convention to policy and reference log-probabilities. Also record `kl_seq_full`, the sequence-summed k1 KL over the full generated response-token sequence before the clean3 visibility cut, as a diagnostic only; it does not replace primary `kl_seq`.
+4. Estimate policy KL in FP32 using the k1 estimator. The primary `kl_seq` sums over exactly the response tokens visible to the gold scorer: the clean3 prefix, plus the EOS token only when generation actually terminated by emitting EOS and no clean3 marker cut occurred. Reaching the maximum generation length, stopping at a clean3 marker, or otherwise ending without an emitted EOS does not qualify as an EOS-ended reply. The clean3 character-level cut is mapped to a token index by decoding successive token prefixes and locating the prefix corresponding to the cleaned response; this mapping is approximate when clean3 removes a trailing label or other text that does not align exactly with token boundaries. Apply the same token mask and completion-boundary convention to policy and reference log-probabilities. Also record `kl_seq_full`, the sequence-summed k1 KL over the full generated response-token sequence before the clean3 visibility cut, as a diagnostic only; it does not replace primary `kl_seq`. The corresponding `kl_token_count` helper and four boundary tests have been pushed in PR #9: marker cut, EOS inclusion, generation cap, and empty response.
 
 5. Score those same checkpoint-generated samples using the pinned gold reward model.
 
