@@ -29,8 +29,6 @@ import pathlib
 import re
 import sys
 
-from src.data import prompt_id
-
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -173,6 +171,7 @@ def gen_one_prompt(model, tok, prompt, n, seed, max_new, device, has_adapter):
 
 def stage_gen(a):
     import torch
+    from src.data import prompt_id
     device = "cuda" if torch.cuda.is_available() else "cpu"
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
