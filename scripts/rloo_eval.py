@@ -29,6 +29,8 @@ import pathlib
 import re
 import sys
 
+from src.data import prompt_id
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -98,6 +100,18 @@ def n_clean_tokens(tok, g, clean):
         else:
             lo = mid + 1
     return lo
+
+
+def ckpt_fingerprint(d):
+    d = pathlib.Path(d)
+    h = hashlib.sha256()
+    for fn in ("adapter_model.safetensors", "adapter_config.json"):
+        f = d / fn
+        if not f.is_file():
+            sys.exit(f"{d}: missing {fn}")
+        h.update(fn.encode() + b"\x00")
+        h.update(f.read_bytes())
+    return h.hexdigest()
 
 
 def load_model(policy, adapter_dir, device, revision):
@@ -177,10 +191,11 @@ def stage_gen(a):
     missing = [s for s in steps if s != 0 and not ckdir(s).is_dir()]
     if missing:
         sys.exit(f"missing checkpoints for steps {missing} in {a.run_dir}: restore from Hub or drop them from --steps")
+    fps = {s: ("base" if s == 0 else ckpt_fingerprint(ckdir(s))) for s in steps}   # all files checked BEFORE any generation
     for step in steps:
         dest = out / f"gen_{run}_s{step}.jsonl"
         ad = None if step == 0 else str(ckdir(step))
-        ck = "base" if ad is None else hashlib.sha256((ckdir(step) / "adapter_model.safetensors").read_bytes()).hexdigest()
+        ck = fps[step]
         side = dest.with_suffix(".ckpt")
         if dest.exists():
             if not side.exists() or side.read_text().strip() != ck:
@@ -189,8 +204,10 @@ def stage_gen(a):
             continue
         model, tok = load_model(a.policy, ad, device, a.policy_revision)
         rows = []
+        skipped = []
         for p in prompts:
             if int(tok(p, return_tensors="pt")["input_ids"].shape[1]) > 1900:
+                skipped.append(prompt_id(p))
                 continue
             for r in gen_one_prompt(model, tok, p, a.n, a.seed, a.max_new, device, ad is not None):
                 r.update(run=run, step=step)
@@ -201,6 +218,8 @@ def stage_gen(a):
                 f.write(json.dumps(r) + "\n")
         side.write_text(ck)
         os.replace(tmp, dest)
+        (out / f"skipped_{run}_s{step}.json").write_text(json.dumps(skipped))
+        print(f"{dest.name}: skipped {len(skipped)} long prompts")
         print(f"{dest.name}: {len(rows)} samples, mean kl_seq {sum(r['kl_seq'] for r in rows) / len(rows):.3f}")
         del model
         torch.cuda.empty_cache()
@@ -281,14 +300,35 @@ def stage_plot(a):
         print(f"!! {miss} samples have no gold score yet (run the gold stage); dropping them")
         df = df.dropna(subset=["gold"])
     pp, sm = summarize(df)
-    by_run = sm.groupby("run")["step"].apply(lambda s: tuple(sorted(s)))
     incomplete = False
+    expected = set(a.expected_runs.split(","))
+    got = set(sm["run"])
+
+    if got != expected:
+        msg = f"INCOMPLETE: missing runs {sorted(expected - got)}, unexpected runs {sorted(got - expected)}"
+        if not a.allow_incomplete:
+            sys.exit(msg)
+        print("!!", msg)
+        incomplete = True
+
+    sets = pp.groupby(["run", "step"])["prompt_id"].apply(frozenset)
+    ref = sets.iloc[0]
+    bad = [k for k, s in sets.items() if s != ref]
+    if bad:
+        msg = f"INCOMPLETE: prompt-id sets differ from {sets.index[0]} for {bad}"
+        if not a.allow_incomplete:
+            sys.exit(msg)
+        print("!!", msg)
+        incomplete = True
+    
+    by_run = sm.groupby("run")["step"].apply(lambda s: tuple(sorted(s)))
     if by_run.nunique() != 1 or sm["n_prompts"].nunique() != 1:
         msg = f"INCOMPLETE: steps per run {by_run.to_dict()}, n_prompts {sorted(sm['n_prompts'].unique())}"
         if not a.allow_incomplete:
             sys.exit(msg)
         print("!!", msg)
         incomplete = True
+    
     pp.to_csv(out / "per_prompt.csv", index=False)
     sm.to_csv(out / "summary.csv", index=False)
     import matplotlib
@@ -331,5 +371,6 @@ if __name__ == "__main__":
             p.add_argument("--bs", type=int, default=8)
             if name == "plot":
                 p.add_argument("--allow-incomplete", action="store_true")
+                p.add_argument("--expected-runs", required=True, help="comma list of run dir names, e.g. c0.5_b0.05_s0,c1_b0.05_s0,...")
     a = ap.parse_args()
     {"gen": stage_gen, "gold": stage_gold, "plot": stage_plot}[a.cmd](a)

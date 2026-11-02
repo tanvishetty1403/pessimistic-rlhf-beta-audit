@@ -91,3 +91,15 @@ def test_kl_tokens_marker_excludes_eos():
 
 def test_kl_tokens_empty():
     assert E.kl_token_count(3, True, True, FakeTok(), ["Human:", " x", "!"], "") == 0
+
+def test_ckpt_fingerprint_changes_with_config(tmp_path):
+    (tmp_path / "adapter_model.safetensors").write_bytes(b"w")
+    (tmp_path / "adapter_config.json").write_text("{}")
+    h1 = E.ckpt_fingerprint(tmp_path)
+    (tmp_path / "adapter_config.json").write_text('{"r": 8}')
+    assert E.ckpt_fingerprint(tmp_path) != h1
+
+def test_ckpt_fingerprint_missing_file(tmp_path):
+    (tmp_path / "adapter_model.safetensors").write_bytes(b"w")
+    with pytest.raises(SystemExit):
+        E.ckpt_fingerprint(tmp_path)
