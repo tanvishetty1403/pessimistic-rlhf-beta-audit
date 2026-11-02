@@ -387,7 +387,7 @@ Before the six-run experiment begins, the training implementation must provide a
 
 - Training configuration, including `max_steps`.
 
-- Training-pool manifest file SHA-256, recorded as the identity-critical field `prompt_pool_manifest_sha256`. This is the SHA-256 of the complete `rloo_pool_manifest.json` file; it is not the hash of the ordered prompt IDs. The ordered training-pool prompt-ID SHA-256 is recorded separately in the pool manifest and reported in section 3.5.
+- Training-pool manifest file SHA-256, recorded as the identity-critical field `prompt_pool_manifest_sha256`. This is the SHA-256 of the complete `rloo_pool_manifest.json` file; it is not the hash of the ordered prompt IDs. The ordered training-pool prompt-ID SHA-256 is recorded separately in the pool manifest and will be reported in section 3.5 once computed.
 
 A resumed run must refuse to continue if its run manifest is missing or if any identity-critical setting differs from the saved manifest. In particular, a mismatch in `max_steps` must prevent resumption.
 
