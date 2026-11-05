@@ -254,10 +254,25 @@ if __name__ == "__main__":
     ap.add_argument("--lams", type=float, nargs="+", default=[0.05, 0.1, 0.2, 0.5, 1.0], help="const-lambda UWO baseline grid (Coste range)")
     ap.add_argument("--bins", type=int, default=20); ap.add_argument("--ess_min", type=float, default=None)
     ap.add_argument("--B", type=int, default=None, help="bootstrap reps (default min(config, 500): F1 bootstraps the whole frontier)")
+    ap.add_argument("--exclude_prompt", type=int, default=None, help="Index of a prompt to exclude")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     cfg = load_cfg(a.config)
     data = {"synthetic": synthetic()} if a.synthetic else {os.path.splitext(os.path.basename(p))[0]: U.load_npz(p) for p in a.npz}
+
+    for name, d in data.items():
+        if a.exclude_prompt is not None:
+            idx = a.exclude_prompt
+            if 'R' in d and idx < d['R'].shape[0]:
+                mask = np.ones(d['R'].shape[0], dtype=bool)
+                mask[idx] = False
+                for k in ['R', 'gold', 'empty']:
+                    if k in d: d[k] = d[k][mask]
+                if 'group' in d: d['group'] = d['group'][mask]
+                # if 'split' in d: d['split'] = d['split'][mask]
+                if 'empty' in d: d['empty_frac'] = float(d['empty'].mean())
+                print(f"Excluded prompt index {idx} (0-based) from {name}; empty_frac now {d.get('empty_frac', float('nan')):.2%}")
+
     assert data, "give --npz or --synthetic"
     res = {n: run(n, d, a, cfg, a.out) for n, d in data.items()}
     U.dump_json(res, os.path.join(a.out, "g2_f1_summary.json"))

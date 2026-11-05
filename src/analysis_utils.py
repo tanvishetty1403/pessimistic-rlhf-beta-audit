@@ -33,13 +33,15 @@ def load_npz(path, allow_test=False):
     if group is not None and len(group) != R.shape[0]:
         raise ValueError(f"{path}: group has {len(group)} entries, R has {R.shape[0]} prompts")
     ef = None
+    emp = None
     if "empty" in d.files:
         ef = float(d["empty"].astype(bool).mean())
+        emp = d["empty"].astype(bool)
         if ef > 0:
             warnings.warn(f"{path}: {ef:.2%} empty responses are included; decide skip vs keep before go/no-go")
     else:
         warnings.warn(f"{path}: no 'empty' mask, cannot report empty-response rate")
-    return dict(R=R, gold=gold, split=split, group=group, empty_frac=ef)
+    return dict(R=R, gold=gold, split=split, group=group, empty_frac=ef, empty=emp)
 
 
 def group_index(group, n=None):

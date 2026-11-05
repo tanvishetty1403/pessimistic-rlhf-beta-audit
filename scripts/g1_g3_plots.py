@@ -42,15 +42,18 @@ def load_cfg(path):
 
 
 # ----------------------------------------------------------------------------- G1
-def g1_curves(R, gold, n_cand):
+def g1_curves(R, gold, n_cand, empty=None):
     """BoN (exact selection probs over the N cached samples) under Mean aggregation.
     Returns per-prompt arrays (P, n): proxy, gold, empirical KL."""
     Pn = R.shape[0]
     proxy = R.mean(axis=-1)
+    sel = proxy.copy()
+    if empty is not None:
+        sel[np.asarray(empty, bool)] = -np.inf   # ranked last for selection only; reported proxy/gold stay real
     pr, go, kl = (np.zeros((Pn, len(n_cand))) for _ in range(3))
     for p in range(Pn):
         for j, n in enumerate(n_cand):
-            w = K_.bon_weights(proxy[p], int(n))
+            w = K_.bon_weights(sel[p], int(n))
             pr[p, j] = (w * proxy[p]).sum()
             go[p, j] = (w * gold[p]).sum()
             kl[p, j] = K_.kl_from_weights(w)
@@ -95,6 +98,8 @@ def g1_summarize(name, pr, go, kl, n_cand, inv, tol, n_ref, B, empty_frac):
     gain_pr = U.cluster_boot_mean(dpr[:, -1] - dpr[:, jr], inv, B)
     if peak_at_end:
         verdict = "INCONCLUSIVE: gold peak not reached within the usable KL range"
+    elif int(n_grid[j_peak]) == 1:
+        verdict = "FAIL (sharpened crit. 1): gold peak at n=1, monotone decline from the reference, not an overoptimization hump"
     elif dhi[0] < 0:
         verdict = "PASS: gold falls after its peak (cross-fit CI excludes 0)"
     else:
@@ -216,6 +221,8 @@ if __name__ == "__main__":
     ap.add_argument("--cs", type=float, nargs="+", default=None, help="override config c grid")
     ap.add_argument("--ess_min", type=float, default=None)
     ap.add_argument("--B", type=int, default=None, help="bootstrap reps (default: config stats.bootstrap_reps)")
+    ap.add_argument("--drop_empty", action="store_true", help="Exclude empty responses from G1 BoN")
+    ap.add_argument("--exclude_prompt", type=int, default=None, help="Index of a prompt to exclude (e.g., 5)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
@@ -226,6 +233,21 @@ if __name__ == "__main__":
     B = a.B or cfg["bootstrap_reps"]
 
     data = {"synthetic": synthetic()} if a.synthetic else {os.path.splitext(os.path.basename(p))[0]: U.load_npz(p) for p in a.npz}
+    
+    for name, d in data.items():
+        if a.exclude_prompt is not None:
+            idx = a.exclude_prompt
+            if 'R' in d and idx < d['R'].shape[0]:
+                mask = np.ones(d['R'].shape[0], dtype=bool)
+                mask[idx] = False
+                for k in ['R', 'gold', 'empty']:
+                    if k in d: d[k] = d[k][mask]
+                if 'group' in d: d['group'] = d['group'][mask]
+                # if 'split' in d: d['split'] = d['split'][mask]
+                if 'empty' in d: d['empty_frac'] = float(d['empty'].mean())
+                print(f"Excluded prompt index {idx} (0-based) from {name}; empty_frac now {d.get('empty_frac', float('nan')):.2%}")
+        
+    
     assert data, "give --npz or --synthetic"
     std_in = json.load(open(a.std_in)) if a.std_in else None
     std_out, summ, curves, invs = {}, {}, {}, {}
@@ -239,7 +261,7 @@ if __name__ == "__main__":
         N, Pn = R.shape[1], R.shape[0]
         inv = U.group_index(d["group"], Pn)
         n_cand = np.unique(np.geomspace(1, max(2, N // 2), 20).astype(int))
-        pr, go, kl = g1_curves(R, gold, n_cand)
+        pr, go, kl = g1_curves(R, gold, n_cand, d["empty"] if (a.drop_empty and "empty" in d) else None)
         summ[name], curves[name] = g1_summarize(name, pr, go, kl, n_cand, inv, a.kl_tol, a.n_ref, B, d["empty_frac"])
         invs[name] = inv
         g3res = g3(R, beta_grid, c_grid, ess_min)
