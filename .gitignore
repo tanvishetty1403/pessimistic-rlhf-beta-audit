@@ -17,12 +17,9 @@ cache/
 samples/
 
 # figures
-figs_smoke/*
-figs_tiny/*
-figs_pilot20/*
-!figs_smoke/*.json
-!figs_tiny/*.json
-!figs_pilot20/*.json
+figs_*/*
+!figs_*/*.json
 
 rloo_resume/
 *.jsonl
+
