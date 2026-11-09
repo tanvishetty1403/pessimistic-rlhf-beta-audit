@@ -7,7 +7,8 @@ npz loading with a freeze guard, standardization stats (fit on tune, reuse on te
 npz contract:
     R     (P, N, K)  proxy scores per ensemble member
     gold  (P, N)     gold scores
-    split str        'tune' | 'rm_train' | ...   ('test' is refused unless allow_test=True)
+    split str        'tune' | 'rm_train' | ...   (0-d str, or a (P,) str array as build_npz.py writes it;
+                     'test' anywhere in it is refused unless allow_test=True)
     group (P,)       first-turn group label, saved as a STR array (not object dtype)
     empty (P, N)     optional bool mask of empty responses (clean3 -> "")
 """
@@ -16,14 +17,21 @@ import warnings
 import numpy as np
 
 
+def _split_label(arr):
+    """Unique split label(s) as one string ('tune', or 'rm_train,tune' if mixed). Works for a 0-d str and for the
+    (P,) str array build_npz.py writes. (str(arr) on a (P,) array gives "['tune' 'tune' ...]", which never equals
+    'test', so the freeze guard used to be silently bypassed.)"""
+    return ",".join(np.unique(np.asarray(arr).astype(str)).tolist())
+
+
 def load_npz(path, allow_test=False):
     d = np.load(path, allow_pickle=False)
     for k in ("R", "gold", "split"):
         if k not in d.files:
             raise KeyError(f"{path}: missing field '{k}'")
-    split = str(d["split"])
-    if split == "test" and not allow_test:
-        raise PermissionError(f"{path}: split='test' is frozen until PREREG sign-off (final_eval only).")
+    split = _split_label(d["split"])
+    if "test" in split.split(",") and not allow_test:
+        raise PermissionError(f"{path}: split contains 'test', frozen until PREREG sign-off (final_eval only).")
     R, gold = d["R"].astype(np.float64), d["gold"].astype(np.float64)
     if R.ndim != 3 or gold.shape != R.shape[:2] or R.shape[2] < 2:
         raise ValueError(f"{path}: expected R (P,N,K>=2) and gold (P,N); got {R.shape}, {gold.shape}")
@@ -35,13 +43,72 @@ def load_npz(path, allow_test=False):
     ef = None
     emp = None
     if "empty" in d.files:
-        ef = float(d["empty"].astype(bool).mean())
         emp = d["empty"].astype(bool)
+        if emp.shape != gold.shape:
+            raise ValueError(f"{path}: empty mask {emp.shape} != gold {gold.shape}")
+        ef = float(emp.mean())
         if ef > 0:
             warnings.warn(f"{path}: {ef:.2%} empty responses are included; decide skip vs keep before go/no-go")
     else:
         warnings.warn(f"{path}: no 'empty' mask, cannot report empty-response rate")
     return dict(R=R, gold=gold, split=split, group=group, empty_frac=ef, empty=emp)
+
+
+def exclude_prompt(d, idx):
+    """Drop prompt `idx` from every per-prompt array present in d (R, gold, empty, group, per-prompt split).
+    None-safe: load_npz always returns an 'empty' key, but its value is None when the npz has no mask.
+    Raises on a bad index (the old inline code silently ignored an out-of-range index)."""
+    P = d["R"].shape[0]
+    if not -P <= idx < P:
+        raise IndexError(f"--exclude_prompt {idx} out of range for {P} prompts")
+    keep = np.ones(P, bool)
+    keep[idx] = False
+    out = dict(d)
+    for k in ("R", "gold", "empty", "group"):
+        if out.get(k) is not None:
+            out[k] = out[k][keep]
+    return out
+
+
+def drop_empty(d, min_frac=0.5):
+    """Remove empty responses by RESAMPLING THE CANDIDATE POOL, not by editing scores.
+
+    Each kept prompt keeps its first N' non-empty samples (samples are iid, so this is unbiased), with
+    N' = min over kept prompts of the non-empty count. R, gold and the reference (n=1) all describe the
+    non-empty response distribution, KL is measured against it, and standardization is fit on it.
+    Prompts with fewer than min_frac * N non-empty samples are removed (listed in drop_info) so one mostly-empty
+    prompt cannot shrink N for everyone; raise min_frac to be stricter.
+
+    (The previous implementation set R[empty] = -1e9 BEFORE fit_std: the 1e9 values went into the mean and std,
+    so r_scale ~ 1e8 and every standardized proxy score collapsed toward 0; the reference mean at n=1 still
+    contained the empties; and an npz with no mask made R[None] = -1e9 overwrite everything.)"""
+    emp = d.get("empty")
+    if emp is None:
+        raise ValueError("--drop_empty needs an 'empty' mask in the npz; this file has none")
+    R, gold = d["R"], d["gold"]
+    P, N = gold.shape
+    valid = ~emp
+    cnt = valid.sum(1)
+    keep = cnt >= max(2, int(np.ceil(min_frac * N)))
+    if not keep.any():
+        raise ValueError(f"no prompt has >= {min_frac:.0%} non-empty samples")
+    rows = np.flatnonzero(keep)
+    Np = int(cnt[keep].min())
+    idx = np.stack([np.flatnonzero(valid[p])[:Np] for p in rows]) # (P', Np), original order kept
+    out = dict(d)
+    out["R"], out["gold"] = R[rows[:, None], idx], gold[rows[:, None], idx]
+    out["empty"] = np.zeros(idx.shape, bool)
+    out["empty_frac"] = 0.0
+    if out.get("group") is not None:
+        out["group"] = out["group"][rows]
+    out["drop_info"] = dict(n_before=int(N), n_after=Np, prompts_before=int(P), prompts_after=int(len(rows)),
+                            prompts_removed=[int(i) for i in np.flatnonzero(~keep)],
+                            empty_frac_before=float(emp.mean()), min_frac=min_frac,
+                            nonempty_samples_discarded=int(cnt[keep].sum() - Np * len(rows)))
+    if out["drop_info"]["prompts_removed"]:
+        warnings.warn(f"drop_empty removed prompts {out['drop_info']['prompts_removed']} (< {min_frac:.0%} non-empty); "
+                      f"indices refer to the array BEFORE this call")
+    return out
 
 
 def group_index(group, n=None):

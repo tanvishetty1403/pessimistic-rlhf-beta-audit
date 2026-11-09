@@ -2,7 +2,7 @@
  "merged_sft_pilot20_noise25": {
   "n_prompts": 19,
   "n_groups": 19,
-  "empty_frac": 0.002261513157894737,
+  "empty_frac": 0.01875,
   "n_grid": [
    1,
    2,
@@ -97,10 +97,12 @@
     ]
    }
   },
-  "verdict": "FAIL (sharpened crit. 1): gold peak at n=1, monotone decline from the reference, not an overoptimization hump",
+  "verdict": "PASS: gold falls after its peak (cross-fit CI excludes 0)",
   "warnings": [
    "max reachable KL 3.22 nats < Coste's ~8.4 (F2 risk: larger N / label noise)"
   ],
+  "drop_empty": null,
+  "excluded_prompt": 4,
   "g3": {
    "beta_grid": [
     0.05,

@@ -260,18 +260,10 @@ if __name__ == "__main__":
     cfg = load_cfg(a.config)
     data = {"synthetic": synthetic()} if a.synthetic else {os.path.splitext(os.path.basename(p))[0]: U.load_npz(p) for p in a.npz}
 
-    for name, d in data.items():
+    for name in list(data):
         if a.exclude_prompt is not None:
-            idx = a.exclude_prompt
-            if 'R' in d and idx < d['R'].shape[0]:
-                mask = np.ones(d['R'].shape[0], dtype=bool)
-                mask[idx] = False
-                for k in ['R', 'gold', 'empty']:
-                    if k in d: d[k] = d[k][mask]
-                if 'group' in d: d['group'] = d['group'][mask]
-                # if 'split' in d: d['split'] = d['split'][mask]
-                if 'empty' in d: d['empty_frac'] = float(d['empty'].mean())
-                print(f"Excluded prompt index {idx} (0-based) from {name}; empty_frac now {d.get('empty_frac', float('nan')):.2%}")
+            data[name] = U.exclude_prompt(data[name], a.exclude_prompt)
+            print(f"Excluded prompt index {a.exclude_prompt} from {name}")
 
     assert data, "give --npz or --synthetic"
     res = {n: run(n, d, a, cfg, a.out) for n, d in data.items()}
