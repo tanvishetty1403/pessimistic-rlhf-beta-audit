@@ -216,6 +216,9 @@ if __name__ == "__main__":
     ap.add_argument("--cs", type=float, nargs="+", default=None, help="override config c grid")
     ap.add_argument("--ess_min", type=float, default=None)
     ap.add_argument("--B", type=int, default=None, help="bootstrap reps (default: config stats.bootstrap_reps)")
+    ap.add_argument("--center_members", action="store_true",
+                    help="subtract each ensemble member's global mean score (fit on this npz, saved in std_stats.json) "
+                         "before computing variance; removes the arbitrary per-member offset. Default: raw scores")
     ap.add_argument("--drop_empty", action="store_true",
                     help="Remove empty responses from the candidate pool (U.drop_empty): non-empty samples only, "
                          "equal N' per prompt, prompts with < --drop_empty_min_frac non-empty are removed")
@@ -247,7 +250,7 @@ if __name__ == "__main__":
         if std_in is not None:
             st = std_in[name]
         else:
-            st = U.fit_std(d["R"], d["gold"], a.std_mode)
+            st = U.fit_std(d["R"], d["gold"], a.std_mode, center_members=a.center_members)
         std_out[name] = st
         R, gold = U.apply_std(d["R"], d["gold"], st)
         N, Pn = R.shape[1], R.shape[0]
@@ -257,6 +260,7 @@ if __name__ == "__main__":
         summ[name], curves[name] = g1_summarize(name, pr, go, kl, n_cand, inv, a.kl_tol, a.n_ref, B, d["empty_frac"])
         summ[name]["drop_empty"] = d.get("drop_info")
         summ[name]["excluded_prompt"] = a.exclude_prompt
+        summ[name]["member_centered"] = st.get("member_offsets") is not None
         invs[name] = inv
         g3res = g3(R, beta_grid, c_grid, ess_min)
         plot_g3(g3res, beta_grid, N, ess_min, name, a.out)

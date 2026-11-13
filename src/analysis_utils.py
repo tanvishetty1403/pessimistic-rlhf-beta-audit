@@ -94,7 +94,7 @@ def drop_empty(d, min_frac=0.5):
         raise ValueError(f"no prompt has >= {min_frac:.0%} non-empty samples")
     rows = np.flatnonzero(keep)
     Np = int(cnt[keep].min())
-    idx = np.stack([np.flatnonzero(valid[p])[:Np] for p in rows]) # (P', Np), original order kept
+    idx = np.stack([np.flatnonzero(valid[p])[:Np] for p in rows])          # (P', Np), original order kept
     out = dict(d)
     out["R"], out["gold"] = R[rows[:, None], idx], gold[rows[:, None], idx]
     out["empty"] = np.zeros(idx.shape, bool)
@@ -121,11 +121,19 @@ def group_index(group, n=None):
 
 
 # ---- standardization -------------------------------------------------------------------------------
-def fit_std(R, gold, mode="within"):
+def fit_std(R, gold, mode="within", center_members=False):
     """mode='within': pooled within-prompt std (what BoN / tilting actually act on).
     mode='global': std over all (prompt, sample) cells (dominated by between-prompt variance).
-    One scale for all K members (keeps ensemble variance structure); gold has its own scale."""
-    mu = R.mean(axis=-1)
+    One scale for all K members (keeps ensemble variance structure); gold has its own scale.
+
+    center_members=True also stores each member's global mean score ('member_offsets', fit on THIS data) and
+    apply_std subtracts it. A Bradley-Terry reward model is identified only up to an additive constant, so every
+    member carries an arbitrary offset; on the SFT-pilot gold-relabel ensembles ~97% of the raw ensemble variance
+    was that offset, not disagreement. Offsets are saved in std_stats.json so later splits reuse the tune-fit values.
+    Default False = the raw-variance pipeline as originally built."""
+    off = R.mean(axis=(0, 1)) if center_members else None
+    Rc = R - off if center_members else R
+    mu = Rc.mean(axis=-1)
     if mode == "global":
         s_r, s_g = mu.std(), gold.std()
     elif mode == "within":
@@ -133,11 +141,20 @@ def fit_std(R, gold, mode="within"):
         s_g = np.sqrt(gold.var(axis=1, ddof=1).mean())
     else:
         raise ValueError(mode)
-    return dict(mode=mode, r_center=float(mu.mean()), r_scale=float(s_r),
-                g_center=float(gold.mean()), g_scale=float(s_g))
+    st = dict(mode=mode, r_center=float(mu.mean()), r_scale=float(s_r),
+              g_center=float(gold.mean()), g_scale=float(s_g))
+    if center_members:
+        st["member_offsets"] = [float(x) for x in off]
+    return st
 
 
 def apply_std(R, gold, st):
+    off = st.get("member_offsets")
+    if off is not None:
+        off = np.asarray(off, dtype=np.float64)
+        if off.shape != (R.shape[-1],):
+            raise ValueError(f"member_offsets has {off.shape[0]} entries, R has K={R.shape[-1]}")
+        R = R - off
     return (R - st["r_center"]) / st["r_scale"], (gold - st["g_center"]) / st["g_scale"]
 
 

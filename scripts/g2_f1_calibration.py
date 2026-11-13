@@ -122,7 +122,7 @@ def ci(a):
 
 # ------------------------------------------------------------------------------- run one condition
 def run(name, d, a, cfg, out):
-    st = json.load(open(a.std_in))[name] if a.std_in else U.fit_std(d["R"], d["gold"], a.std_mode)
+    st = json.load(open(a.std_in))[name] if a.std_in else U.fit_std(d["R"], d["gold"], a.std_mode, center_members=a.center_members)
     R, gold = U.apply_std(d["R"], d["gold"], st)
     Pn = R.shape[0]; inv = U.group_index(d["group"], Pn)
     G = int(inv.max()) + 1
@@ -247,6 +247,7 @@ if __name__ == "__main__":
     ap.add_argument("--npz", nargs="+", default=[]); ap.add_argument("--synthetic", action="store_true")
     ap.add_argument("--out", default="figs"); ap.add_argument("--config", default="configs/base.yaml")
     ap.add_argument("--std_mode", choices=["within", "global"], default="within")
+    ap.add_argument("--center_members", action="store_true")
     ap.add_argument("--std_in", default=None, help="std_stats.json from g1_g3_plots.py (keys = npz basenames)")
     ap.add_argument("--betas", type=float, nargs=3, default=[0.03, 5.0, 30], metavar=("LO", "HI", "NUM"),
                     help="dense beta grid used only to trace frontiers (the pre-registered beta grid is too coarse for interpolation)")
