@@ -1,0 +1,16 @@
+{
+ "merged_sft_pilot20_noise0": {
+  "mode": "within",
+  "r_center": 3.9248901395499702,
+  "r_scale": 0.6780424936394299,
+  "g_center": -11.92541750073433,
+  "g_scale": 3.7515753708634314
+ },
+ "merged_sft_pilot20_noise25": {
+  "mode": "within",
+  "r_center": 2.3799008615501225,
+  "r_scale": 0.29214832153912423,
+  "g_center": -11.92541750073433,
+  "g_scale": 3.7515753708634314
+ }
+}

@@ -17,8 +17,8 @@ cache/
 samples/
 
 # figures
-figs_*/*
-!figs_*/*.json
+!figs/**/*.json
+
 
 rloo_resume/
 *.jsonl

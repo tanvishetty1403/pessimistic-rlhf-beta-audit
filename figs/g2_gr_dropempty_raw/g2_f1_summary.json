@@ -1,0 +1,304 @@
+{
+ "merged_sft_pilot20_gr_noise0_dropempty": {
+  "n_prompts": 20,
+  "n_groups": 20,
+  "empty_frac": 0.0,
+  "std": {
+   "mode": "within",
+   "r_center": 2.1584084859298684,
+   "r_scale": 0.8204889750312067,
+   "g_center": -11.93187834979498,
+   "g_scale": 3.7063592369303078
+  },
+  "g2": {
+   "spearman_var_vs_abs_err": {
+    "mean": 0.05800607606397974,
+    "ci95": [
+     -0.02142908577316385,
+     0.11728626450353485
+    ]
+   },
+   "spearman_var_vs_signed_err": {
+    "mean": 0.25687617517033984,
+    "ci95": [
+     0.15690716543596686,
+     0.33879786230670034
+    ]
+   },
+   "kappa": {
+    "value": 0.031110670583352113,
+    "alpha": 0.7845174031973257,
+    "ci95": [
+     0.002693819565252349,
+     0.06566818909150927
+    ]
+   },
+   "kappa_lin": {
+    "value": 0.006665275926393346,
+    "alpha": 0.7757047675471445
+   },
+   "kappa_halves": [
+    0.02359781307149553,
+    0.03489784738102741
+   ],
+   "k_dof_note": "K=5 -> ~4 dof per sigma^2; Hahami report ~71% rel. error at K=5",
+   "gate": "FAIL/INCONCLUSIVE: sigma^2 does not credibly predict |proxy-gold error|"
+  },
+  "f1": {
+   "c_grid": [
+    0.1,
+    0.2,
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0
+   ],
+   "kl_grid": [
+    0.13587084205446162,
+    0.31056192469591226,
+    0.485253007337363,
+    0.6599440899788136,
+    0.8346351726202643,
+    1.009326255261715,
+    1.1840173379031655,
+    1.3587084205446163
+   ],
+   "kappa_used": 0.031110670583352113,
+   "kappa_note": "",
+   "M_uncal": [
+    -0.5272548032524859,
+    -0.5145734681022447,
+    -0.4900519430557363,
+    -0.4537673289830437,
+    -0.37863414552837327,
+    -0.15025981039782055,
+    0.10327449667782326
+   ],
+   "M_cal": [
+    -0.2824662288227566,
+    -0.05636015475829405,
+    0.17809931815952484,
+    0.20941987923696292,
+    0.2203395661430105,
+    0.2260116031755267,
+    0.22778345610353073
+   ],
+   "cstar_uncal": 10.0,
+   "cstar_cal": 10.0,
+   "cstar_uncal_boot_ci95": [
+    10.0,
+    10.0
+   ],
+   "cstar_cal_boot_ci95": [
+    10.0,
+    10.0
+   ],
+   "analytic_cstar_cal_from_uncal": 0.3111067058335211,
+   "M_baselines": {
+    "Mean": 0.2294820010881668,
+    "WCO": -0.11946532705303933,
+    "UWO lam=0.05": 0.1846458508863101,
+    "UWO lam=0.1": 0.11738169861530948,
+    "UWO lam=0.2": -0.11285689349738237,
+    "UWO lam=0.5": -0.46770864026930414,
+    "UWO lam=1": -0.5228107999202243
+   },
+   "insample_best_minus_tied": {
+    "uncal": 0.557041825660867,
+    "cal": 0.01836357686656781,
+    "note": "optimistic: >=0 by construction"
+   },
+   "crossfit": {
+    "A->B uncal": {
+     "c_selected": 10.0,
+     "heldout_gap_vs_tied": 0.44829773453103816,
+     "ci95": [
+      0.28292837489596895,
+      0.6502386470231347
+     ]
+    },
+    "A->B cal": {
+     "c_selected": 10.0,
+     "heldout_gap_vs_tied": 0.009363334640558774,
+     "ci95": [
+      0.005305244547090767,
+      0.017235559228204127
+     ]
+    },
+    "B->A uncal": {
+     "c_selected": 10.0,
+     "heldout_gap_vs_tied": 0.6319973737428085,
+     "ci95": [
+      0.36548535449894476,
+      0.899051200991874
+     ]
+    },
+    "B->A cal": {
+     "c_selected": 10.0,
+     "heldout_gap_vs_tied": 0.02761821485256033,
+     "ci95": [
+      0.01721375459984788,
+      0.039125892163220086
+     ]
+    }
+   },
+   "tied_verdict_hint": "heldout gap CI excludes 0 in at least one fold",
+   "warnings": [
+    "c*_uncal=10 sits on the edge of the c grid: optimum not bracketed, extend the grid before reading c*",
+    "c*_cal=10 sits on the edge of the c grid: optimum not bracketed, extend the grid before reading c*"
+   ]
+  }
+ },
+ "merged_sft_pilot20_gr_noise25_dropempty": {
+  "n_prompts": 20,
+  "n_groups": 20,
+  "empty_frac": 0.0,
+  "std": {
+   "mode": "within",
+   "r_center": -0.5273073858963816,
+   "r_scale": 0.2167278533547745,
+   "g_center": -11.93187834979498,
+   "g_scale": 3.7063592369303078
+  },
+  "g2": {
+   "spearman_var_vs_abs_err": {
+    "mean": 0.06755286196816948,
+    "ci95": [
+     0.012616254499246584,
+     0.13133830417416154
+    ]
+   },
+   "spearman_var_vs_signed_err": {
+    "mean": 0.11807017774028639,
+    "ci95": [
+     0.07323796034937718,
+     0.16453395739173943
+    ]
+   },
+   "kappa": {
+    "value": -0.0009522611998258157,
+    "alpha": 2.2729390257826303,
+    "ci95": [
+     -0.01846025306600167,
+     0.022100766042188094
+    ]
+   },
+   "kappa_lin": {
+    "value": -0.01951930873494785,
+    "alpha": 6.584347423975646
+   },
+   "kappa_halves": [
+    0.012054062902509738,
+    -0.014071389414180336
+   ],
+   "k_dof_note": "K=5 -> ~4 dof per sigma^2; Hahami report ~71% rel. error at K=5",
+   "gate": "PASS (rank corr CI > 0; threshold still OPEN)"
+  },
+  "f1": {
+   "c_grid": [
+    0.1,
+    0.2,
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0
+   ],
+   "kl_grid": [
+    0.09706009168120072,
+    0.22185163812845882,
+    0.34664318457571686,
+    0.47143473102297495,
+    0.596226277470233,
+    0.7210178239174911,
+    0.8458093703647491,
+    0.9706009168120072
+   ],
+   "kappa_used": 0.0,
+   "kappa_note": "kappa<=0: variance carries no calibratable scale; 'cal' = Mean aggregation",
+   "M_uncal": [
+    -0.12903617306590226,
+    -0.022169427445868643,
+    -0.008882381108113837,
+    -0.000653036319902536,
+    0.0028049854083775846,
+    -0.013143547205423083,
+    -0.04205293783080159
+   ],
+   "M_cal": [
+    -0.09758956868120935,
+    -0.09758956868120935,
+    -0.09758956868120935,
+    -0.09758956868120935,
+    -0.09758956868120935,
+    -0.09758956868120935,
+    -0.09758956868120935
+   ],
+   "cstar_uncal": 2.0,
+   "cstar_cal": 0.1,
+   "cstar_uncal_boot_ci95": [
+    0.2,
+    5.0
+   ],
+   "cstar_cal_boot_ci95": [
+    0.1,
+    0.1
+   ],
+   "analytic_cstar_cal_from_uncal": 0.0,
+   "M_baselines": {
+    "Mean": -0.09758956868120935,
+    "WCO": -0.035977325971031045,
+    "UWO lam=0.05": -0.050901368189373714,
+    "UWO lam=0.1": -0.010666005536456078,
+    "UWO lam=0.2": 0.005059120095001761,
+    "UWO lam=0.5": -0.018456629259497793,
+    "UWO lam=1": -0.12903617306590226
+   },
+   "insample_best_minus_tied": {
+    "uncal": 0.0034580217282801206,
+    "cal": 0.0,
+    "note": "optimistic: >=0 by construction"
+   },
+   "crossfit": {
+    "A->B uncal": {
+     "c_selected": 2.0,
+     "heldout_gap_vs_tied": -0.0031044035631343503,
+     "ci95": [
+      -0.03206520758243571,
+      0.02369314409711422
+     ]
+    },
+    "A->B cal": {
+     "c_selected": 0.1,
+     "heldout_gap_vs_tied": 0.04232225290261832,
+     "ci95": [
+      -0.005484776752300211,
+      0.09127579899855362
+     ]
+    },
+    "B->A uncal": {
+     "c_selected": 1.0,
+     "heldout_gap_vs_tied": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ]
+    },
+    "B->A cal": {
+     "c_selected": 0.1,
+     "heldout_gap_vs_tied": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ]
+    }
+   },
+   "tied_verdict_hint": "heldout gap CI includes 0 in all folds (no evidence the tie costs reward in this setup; check power/epsilon)",
+   "warnings": [
+    "common usable KL range tops out at 0.97 nats: frontier comparison is weak (raise N / lower ess_min)",
+    "c*_cal=0.1 sits on the edge of the c grid: optimum not bracketed, extend the grid before reading c*"
+   ]
+  }
+ }
+}
